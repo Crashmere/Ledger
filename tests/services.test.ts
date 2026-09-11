@@ -570,6 +570,60 @@ describe('专项账户 kind 与 excludeProjects 排除', () => {
     expect(filtered[0].type).toBe('expense');
   });
 
+  it('搜索默认排除专项，只有显式选中的专项及其关联转账参与', async () => {
+    const normal = await accounts.create({ name: '日常', color: 1 });
+    const otherNormal = await accounts.create({ name: '现金', color: 1 });
+    const projectA = await accounts.create({ name: '旅行 A', color: 2, kind: 'project' });
+    const projectB = await accounts.create({ name: '旅行 B', color: 3, kind: 'project' });
+    const [daily, otherDaily, expenseA, expenseB, normalTransfer, toA, fromA, toB, fromB, betweenProjects] =
+      await txns.createMany([
+        { type: 'expense', amount: 100, accountId: normal.id },
+        { type: 'income', amount: 200, accountId: otherNormal.id },
+        { type: 'expense', amount: 300, accountId: projectA.id },
+        { type: 'expense', amount: 400, accountId: projectB.id },
+        { type: 'transfer', amount: 50, accountId: normal.id, toAccountId: otherNormal.id },
+        { type: 'transfer', amount: 60, accountId: normal.id, toAccountId: projectA.id },
+        { type: 'transfer', amount: 70, accountId: projectA.id, toAccountId: normal.id },
+        { type: 'transfer', amount: 80, accountId: normal.id, toAccountId: projectB.id },
+        { type: 'transfer', amount: 90, accountId: projectB.id, toAccountId: normal.id },
+        { type: 'transfer', amount: 95, accountId: projectB.id, toAccountId: projectA.id },
+      ]);
+    const ids = (list: { id: string }[]) => list.map((t) => t.id).sort();
+    const query = (accountIds?: string[]) => txns.query({ excludeUnselectedProjects: true, accountIds });
+
+    expect(ids(await query())).toEqual(ids([daily, otherDaily, normalTransfer]));
+    expect(ids(await query([normal.id]))).toEqual(ids([daily, normalTransfer]));
+    expect(ids(await query([projectA.id]))).toEqual(ids([expenseA, toA, fromA, betweenProjects]));
+    expect(ids(await query([normal.id, projectA.id]))).toEqual(ids([daily, normalTransfer, expenseA, toA, fromA, betweenProjects]));
+    expect(ids(await query([projectA.id, projectB.id]))).toEqual(ids([expenseA, expenseB, toA, fromA, toB, fromB, betweenProjects]));
+    expect(ids(await query([]))).toEqual(ids([daily, otherDaily, normalTransfer]));
+    expect(await txns.query({})).toHaveLength(10);
+    expect(await txns.query({ excludeProjects: true, excludeUnselectedProjects: true, accountIds: [projectA.id] })).toHaveLength(0);
+  });
+
+  it('专项分类和标签不能绕过账户选择，关键词金额排序分页继续生效', async () => {
+    const normal = await accounts.create({ name: '日常', color: 1 });
+    const project = await accounts.create({ name: '旅行', color: 2, kind: 'project' });
+    const category = await categories.create({ accountId: project.id, name: '充电', color: 1 });
+    const tag = await tags.create({ name: '电费', color: 1 });
+    const [daily, first, second] = await txns.createMany([
+      { type: 'expense', amount: 100, accountId: normal.id, title: '充电', tagIds: [tag.id] },
+      { type: 'expense', amount: 200, accountId: project.id, categoryId: category.id, title: '充电', tagIds: [tag.id] },
+      { type: 'expense', amount: 300, accountId: project.id, categoryId: category.id, title: '充电', tagIds: [tag.id] },
+      { type: 'expense', amount: 400, accountId: project.id, categoryId: category.id, title: '停车', tagIds: [tag.id] },
+      { type: 'income', amount: 500, accountId: project.id, title: '充电退款' },
+    ]);
+    expect(await txns.query({ excludeUnselectedProjects: true, categoryIds: [category.id] })).toHaveLength(0);
+    expect((await txns.query({ excludeUnselectedProjects: true, keyword: '充电', tagIds: [tag.id] })).map((t) => t.id)).toEqual([daily.id]);
+    const query = {
+      excludeUnselectedProjects: true, accountIds: [project.id], categoryIds: [category.id],
+      keyword: '充电', tagIds: [tag.id], amountMin: 150, amountMax: 350,
+      sortBy: 'amount' as const, sortDir: 'desc' as const,
+    };
+    expect((await txns.query(query)).map((t) => t.id)).toEqual([second.id, first.id]);
+    expect((await txns.query({ ...query, limit: 1, offset: 1 })).map((t) => t.id)).toEqual([first.id]);
+  });
+
   it('stats.summary/breakdown/trend excludeProjects：专项支出不进日常口径', async () => {
     const normal = await accounts.create({ name: '日常', color: 1 });
     const proj = await accounts.create({ name: '旅行', color: 2, kind: 'project' });

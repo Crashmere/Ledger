@@ -170,6 +170,8 @@ export interface TxnQuery {
    * 用于概览/报告等「日常口径」默认屏蔽专项开支；显式选中专项账户时不要置 true。
    */
   excludeProjects?: boolean;
+  // 专项账户仅在 accountIds 中显式选中时参与查询；excludeProjects=true 仍优先全部排除。
+  excludeUnselectedProjects?: boolean;
 }
 
 /** 交易带上关联标签一起返回，方便 UI 渲染。 */

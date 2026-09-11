@@ -167,6 +167,7 @@ function categoryIdsForNames(names: string[]): Id[] {
 const activeQuery = computed<TxnQuery>(() => {
   // 默认全部时间（不传 timeFrom/timeTo）；顺序由展示排序选项决定。
   const q: TxnQuery = {
+    excludeUnselectedProjects: true,
     sortBy: sortSel.value.startsWith('amount') ? 'amount' : 'time',
     sortDir: sortSel.value.endsWith('asc') ? 'asc' : 'desc',
   };
@@ -264,7 +265,8 @@ const hitIncome = computed<number>(() =>
 /** 三卡副标题：说明当前关键词/时间口径。 */
 const summaryHint = computed<string>(() => {
   const kw = keyword.value.trim();
-  return kw ? `关键词「${kw}」 · 全部时间` : '全部交易 · 全部时间';
+  const scope = selectedAccountIds.value.length ? '所选账户' : '普通账户';
+  return kw ? `关键词「${kw}」 · 全部时间` : `${scope} · 全部时间`;
 });
 
 /**

@@ -93,14 +93,19 @@ export class TxnServiceImpl implements TxnService {
       where.push(`amount <= ?`);
       params.push(q.amountMax);
     }
-    // 排除专项账户（kind='project'）交易：转出/转入任一命中专项账户即排除。
-    // 用于概览/报告等「日常口径」屏蔽专项开支；显式选专项账户查看时不传此标记。
-    if (q.excludeProjects) {
-      where.push(
-        `account_id NOT IN (SELECT id FROM account WHERE kind = 'project')
-         AND (to_account_id IS NULL
-              OR to_account_id NOT IN (SELECT id FROM account WHERE kind = 'project'))`,
-      );
+    if (q.excludeProjects || q.excludeUnselectedProjects) {
+      const projects = `SELECT id FROM account WHERE kind = 'project'`;
+      const allowed = [
+        `(account_id NOT IN (${projects})
+          AND (to_account_id IS NULL OR to_account_id NOT IN (${projects})))`,
+      ];
+      if (!q.excludeProjects && q.accountIds?.length) {
+        // 只放开选中专项的关联交易，避免普通账户的另一端带入无关专项。
+        const selectedProjects = `${projects} AND id IN (${placeholders(q.accountIds.length)})`;
+        allowed.push(`account_id IN (${selectedProjects})`, `to_account_id IN (${selectedProjects})`);
+        params.push(...q.accountIds, ...q.accountIds);
+      }
+      where.push(`(${allowed.join(' OR ')})`);
     }
 
     const sortBy = q.sortBy === 'amount' ? 'amount' : 'time';
