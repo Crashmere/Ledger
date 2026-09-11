@@ -664,6 +664,13 @@ onUnmounted(() => {
 
 <template>
   <div class="content add-content">
+    <Teleport v-if="!isEdit" to="#topbar-slot">
+      <RouterLink
+        class="btn btn-ghost btn-sm"
+        :to="{ path: '/batch-import', query: { account: accountId || undefined, date: dateStr } }"
+        @keydown.enter.stop
+      >批量导入</RouterLink>
+    </Teleport>
     <div class="add-card add-card-2col">
       <!-- ========== 左栏：类型 + 金额 + 键盘（操作核心） ========== -->
       <div class="add-left">

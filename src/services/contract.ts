@@ -182,6 +182,7 @@ export interface TxnService {
   get(id: Id): Promise<TxnWithTags | null>;
   /** 记一笔：校验金额>0、transfer 的 toAccountId 有效且 != accountId、分类属该账户。 */
   create(draft: TxnDraft): Promise<Txn>;
+  createMany(drafts: readonly TxnDraft[]): Promise<Txn[]>;
   update(id: Id, patch: Partial<TxnDraft>): Promise<Txn>;
   remove(id: Id): Promise<void>;
 }

@@ -22,6 +22,7 @@ import {
   yuanToCents,
 } from '../src/services';
 import { AppError } from '../src/services/contract';
+import { onDataChanged } from '../src/services/sync/bus';
 
 let adapter: BetterSqliteAdapter;
 let accounts: AccountServiceImpl;
@@ -61,6 +62,77 @@ describe('money.yuanToCents 回归', () => {
     expect(yuanToCents('7.8')).toBe(780);
     expect(yuanToCents(0)).toBe(0);
     expect(yuanToCents(100)).toBe(10000);
+  });
+});
+
+describe('TxnService.createMany', () => {
+  it('普通与专项账户批量写入全字段，提交后只通知一次', async () => {
+    const a = await accounts.create({ name: '日常', color: 1 });
+    const b = await accounts.create({ name: '旅行', color: 2, kind: 'project' });
+    const c = await categories.create({ accountId: b.id, name: '购物', color: 3 });
+    const tag = await tags.create({ name: '测试', color: 1 });
+    let notifications = 0;
+    const off = onDataChanged(() => notifications++);
+    try {
+      const time = new Date(2026, 8, 11).getTime();
+      const result = await txns.createMany([
+        { type: 'expense', amount: 928, accountId: a.id, title: '滤芯', note: '一个', time },
+        { type: 'income', amount: 3535, accountId: b.id, categoryId: c.id, title: '退款', time, tagIds: [tag.id] },
+      ]);
+      expect(notifications).toBe(1);
+      expect(result).toHaveLength(2);
+      expect(new Set(result.map((t) => t.id)).size).toBe(2);
+      expect(await txns.get(result[0]!.id)).toMatchObject({ title: '滤芯', note: '一个', amount: 928, time, tags: [] });
+      expect(await txns.get(result[1]!.id)).toMatchObject({ accountId: b.id, categoryId: c.id, tags: [tag] });
+      expect(await adapter.all('SELECT id FROM txn WHERE updated_at = created_at AND deleted_at IS NULL')).toHaveLength(2);
+      expect(await txns.query({ excludeProjects: true })).toHaveLength(1);
+    } finally { off(); }
+  });
+
+  it('中途分类归属失败时回滚所有交易和标签，不通知同步', async () => {
+    const a = await accounts.create({ name: 'A', color: 1 });
+    const b = await accounts.create({ name: 'B', color: 1 });
+    const c = await categories.create({ accountId: b.id, name: 'B类', color: 1 });
+    const tag = await tags.create({ name: '标签', color: 1 });
+    let notifications = 0;
+    const off = onDataChanged(() => notifications++);
+    try {
+      await expect(txns.createMany([
+        { type: 'expense', amount: 100, accountId: a.id, tagIds: [tag.id] },
+        { type: 'expense', amount: 200, accountId: a.id, categoryId: c.id },
+      ])).rejects.toMatchObject({ code: 'VALIDATION', message: expect.stringContaining('第 2 笔') });
+      expect(await txns.query({})).toHaveLength(0);
+      expect(await adapter.all('SELECT * FROM txn_tag')).toHaveLength(0);
+      expect(notifications).toBe(0);
+    } finally { off(); }
+  });
+
+  it('底层写入失败也整批回滚，空批次不通知', async () => {
+    const a = await accounts.create({ name: 'A', color: 1 });
+    let notifications = 0;
+    const off = onDataChanged(() => notifications++);
+    try {
+      await expect(txns.createMany([
+        { type: 'expense', amount: 100, accountId: a.id },
+        { type: 'expense', amount: 200, accountId: a.id, tagIds: ['missing-tag'] },
+      ])).rejects.toThrow();
+      expect(await txns.query({})).toHaveLength(0);
+      expect(await txns.createMany([])).toEqual([]);
+      expect(notifications).toBe(0);
+    } finally { off(); }
+  });
+
+  it('拒绝已软删账户、已软删分类和非法日期金额', async () => {
+    const a = await accounts.create({ name: 'A', color: 1 });
+    const c = await categories.create({ accountId: a.id, name: '类', color: 1 });
+    await categories.remove(c.id);
+    await expectAppError(() => txns.createMany([{ type: 'expense', amount: 100, accountId: a.id, categoryId: c.id }]), 'VALIDATION');
+    for (const patch of [{ amount: Number.MAX_SAFE_INTEGER + 1 }, { amount: 0 }, { time: NaN }, { time: 1e16 }]) {
+      await expectAppError(() => txns.createMany([{ type: 'expense', amount: 100, accountId: a.id, ...patch }]), 'VALIDATION');
+    }
+    await accounts.remove(a.id);
+    await expectAppError(() => txns.createMany([{ type: 'expense', amount: 100, accountId: a.id }]), 'VALIDATION');
+    expect(await txns.query({})).toHaveLength(0);
   });
 });
 

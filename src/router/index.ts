@@ -15,6 +15,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../pages/AddTxn.vue'),
   },
   {
+    path: '/batch-import',
+    name: 'batch-import',
+    meta: { title: '批量导入' },
+    component: () => import('../pages/BatchImport.vue'),
+  },
+  {
     path: '/txn/:id/edit',
     name: 'txn-edit',
     meta: { title: '编辑交易' },

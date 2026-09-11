@@ -140,6 +140,32 @@ export class TxnServiceImpl implements TxnService {
   }
 
   async create(draft: TxnDraft): Promise<Txn> {
+    const txn = await this.adapter.transaction((tx) => this.insertDraft(tx, draft));
+    emitDataChanged();
+    return txn;
+  }
+
+  async createMany(drafts: readonly TxnDraft[]): Promise<Txn[]> {
+    if (drafts.length === 0) return [];
+    const txns = await this.adapter.transaction(async (tx) => {
+      const result: Txn[] = [];
+      for (const [index, draft] of drafts.entries()) {
+        try {
+          result.push(await this.insertDraft(tx, draft));
+        } catch (error) {
+          if (error instanceof AppError) {
+            throw new AppError(error.code, `第 ${index + 1} 笔：${error.message}`);
+          }
+          throw error;
+        }
+      }
+      return result;
+    });
+    emitDataChanged();
+    return txns;
+  }
+
+  private async insertDraft(tx: SqliteAdapter, draft: TxnDraft): Promise<Txn> {
     const effective = await this.validateAndNormalize({
       type: draft.type,
       amount: draft.amount,
@@ -149,49 +175,22 @@ export class TxnServiceImpl implements TxnService {
       time: draft.time ?? Date.now(),
       title: draft.title ?? null,
       note: draft.note ?? null,
-    });
-
+    }, tx);
     const id = crypto.randomUUID();
     const createdAt = Date.now();
-    const tagIds = dedupe(draft.tagIds ?? []);
-
-    await this.adapter.transaction(async (tx) => {
-      await tx.run(
-        `INSERT INTO txn
-           (id, type, amount, account_id, to_account_id, category_id, time, title, note, created_at, updated_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
-        [
-          id,
-          effective.type,
-          effective.amount,
-          effective.accountId,
-          effective.toAccountId,
-          effective.categoryId,
-          effective.time,
-          effective.title,
-          effective.note,
-          createdAt,
-          createdAt, // 新建：updated_at = created_at
-        ],
-      );
-      for (const tagId of tagIds) {
-        await tx.run(`INSERT INTO txn_tag (txn_id, tag_id) VALUES (?, ?)`, [id, tagId]);
-      }
-    });
-
-    emitDataChanged();
-    return {
-      id,
-      type: effective.type,
-      amount: effective.amount,
-      accountId: effective.accountId,
-      toAccountId: effective.toAccountId,
-      categoryId: effective.categoryId,
-      time: effective.time,
-      title: effective.title,
-      note: effective.note,
-      createdAt,
-    };
+    await tx.run(
+      `INSERT INTO txn
+         (id, type, amount, account_id, to_account_id, category_id, time, title, note, created_at, updated_at, deleted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+      [
+        id, effective.type, effective.amount, effective.accountId, effective.toAccountId,
+        effective.categoryId, effective.time, effective.title, effective.note, createdAt, createdAt,
+      ],
+    );
+    for (const tagId of dedupe(draft.tagIds ?? [])) {
+      await tx.run(`INSERT INTO txn_tag (txn_id, tag_id) VALUES (?, ?)`, [id, tagId]);
+    }
+    return { id, ...effective, createdAt };
   }
 
   async update(id: Id, patch: Partial<TxnDraft>): Promise<Txn> {
@@ -288,14 +287,17 @@ export class TxnServiceImpl implements TxnService {
     time: number;
     title: string | null;
     note: string | null;
-  }): Promise<TxnEffective> {
-    if (!Number.isInteger(v.amount) || v.amount <= 0) {
-      throw new AppError('VALIDATION', '金额必须为正整数（分）');
+  }, adapter: SqliteAdapter = this.adapter): Promise<TxnEffective> {
+    if (!Number.isSafeInteger(v.amount) || v.amount <= 0) {
+      throw new AppError('VALIDATION', '金额必须为安全范围内的正整数（分）');
+    }
+    if (!Number.isSafeInteger(v.time) || !Number.isFinite(new Date(v.time).getTime())) {
+      throw new AppError('VALIDATION', '交易日期无效');
     }
     if (!v.accountId) {
       throw new AppError('VALIDATION', '缺少账户');
     }
-    await this.assertAccountExists(v.accountId);
+    await this.assertAccountExists(v.accountId, adapter);
 
     let toAccountId = v.toAccountId;
     if (v.type === 'transfer') {
@@ -305,7 +307,7 @@ export class TxnServiceImpl implements TxnService {
       if (toAccountId === v.accountId) {
         throw new AppError('VALIDATION', '转账的转入账户不能与转出账户相同');
       }
-      await this.assertAccountExists(toAccountId);
+      await this.assertAccountExists(toAccountId, adapter);
     } else {
       // 非转账不得有转入账户（与 04 的 CHECK 一致）。
       if (toAccountId) {
@@ -315,7 +317,7 @@ export class TxnServiceImpl implements TxnService {
     }
 
     if (v.categoryId) {
-      const cat = await this.adapter.get<{ account_id: string }>(
+      const cat = await adapter.get<{ account_id: string }>(
         `SELECT account_id FROM category WHERE id = ? AND deleted_at IS NULL`,
         [v.categoryId],
       );
@@ -339,8 +341,8 @@ export class TxnServiceImpl implements TxnService {
     };
   }
 
-  private async assertAccountExists(accountId: Id): Promise<void> {
-    const row = await this.adapter.get<{ id: string }>(
+  private async assertAccountExists(accountId: Id, adapter: SqliteAdapter): Promise<void> {
+    const row = await adapter.get<{ id: string }>(
       `SELECT id FROM account WHERE id = ? AND deleted_at IS NULL`,
       [accountId],
     );
