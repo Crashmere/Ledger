@@ -26,6 +26,7 @@
 // ============================================================
 import { computed, onMounted, onBeforeUnmount, nextTick, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { useSelectedMonth } from '../composables/useSelectedMonth';
 import {
   accountService,
   categoryService,
@@ -42,6 +43,8 @@ import {
 } from '../services';
 
 const router = useRouter();
+const { timeFrom, timeTo, monthLabel } = useSelectedMonth();
+const filterByMonth = ref(false);
 
 /** 详情卡「编辑」→ 复用 AddTxn 双模式。 */
 function openEdit(id: Id): void {
@@ -152,7 +155,7 @@ async function loadStatic(): Promise<void> {
 }
 
 // ============================================================
-// 唯一真相源：仅按【结构化筛选】查询候选列表（不含关键词，全部时间）
+// 唯一真相源：按结构化筛选与可选月份查询候选列表，不含关键词。
 // ============================================================
 const baseTxns = ref<TxnWithTags[]>([]);
 const loading = ref(false);
@@ -171,6 +174,10 @@ const activeQuery = computed<TxnQuery>(() => {
     sortBy: sortSel.value.startsWith('amount') ? 'amount' : 'time',
     sortDir: sortSel.value.endsWith('asc') ? 'asc' : 'desc',
   };
+  if (filterByMonth.value) {
+    q.timeFrom = timeFrom.value;
+    q.timeTo = timeTo.value;
+  }
   if (selectedTypes.value.length > 0) q.types = [...selectedTypes.value];
   if (selectedAccountIds.value.length > 0) q.accountIds = [...selectedAccountIds.value];
   const catIds = categoryIdsForNames(selectedCategoryNames.value);
@@ -181,20 +188,23 @@ const activeQuery = computed<TxnQuery>(() => {
   return q;
 });
 
+let loadRequest = 0;
 async function load(): Promise<void> {
+  const request = ++loadRequest;
   loading.value = true;
   try {
-    baseTxns.value = await txnService.query(activeQuery.value);
+    const result = await txnService.query(activeQuery.value);
+    if (request === loadRequest) baseTxns.value = result;
   } finally {
-    loading.value = false;
+    if (request === loadRequest) loading.value = false;
   }
 }
 
 onMounted(async () => {
+  window.addEventListener('keydown', onSearchGlobalKeydown);
   loadRecent();
   await loadStatic();
   await load();
-  window.addEventListener('keydown', onSearchGlobalKeydown);
 });
 
 // 结构化筛选变化 → 重发 query（敲关键词不重查库，见 §七坑位6）。
@@ -266,7 +276,8 @@ const hitIncome = computed<number>(() =>
 const summaryHint = computed<string>(() => {
   const kw = keyword.value.trim();
   const scope = selectedAccountIds.value.length ? '所选账户' : '普通账户';
-  return kw ? `关键词「${kw}」 · 全部时间` : `${scope} · 全部时间`;
+  const period = filterByMonth.value ? monthLabel.value : '全部时间';
+  return `${kw ? `关键词「${kw}」` : scope} · ${period}`;
 });
 
 /**
@@ -336,8 +347,9 @@ function moveSelection(delta: number): void {
 }
 
 function onSearchGlobalKeydown(e: KeyboardEvent): void {
-  if (e.altKey) return;
+  if (e.altKey || e.defaultPrevented || e.isComposing) return;
   const el = e.target as HTMLElement | null;
+  if (e.key !== 'Escape' && el?.closest('button, select, input[type="checkbox"]')) return;
   const inField =
     !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
   // ↑/↓ 移动选中项：即使焦点在搜索框也生效（列表导航优先于文本光标上下，
@@ -578,6 +590,7 @@ function clearKeyword(): void {
   keyword.value = '';
 }
 onBeforeUnmount(() => {
+  loadRequest++;
   if (recentTimer) clearTimeout(recentTimer);
   window.removeEventListener('keydown', onSearchGlobalKeydown);
 });
@@ -654,10 +667,12 @@ const hasAnyFilter = computed(
     selectedCategoryNames.value.length > 0 ||
     selectedTagIds.value.length > 0 ||
     hasAmountChip.value ||
+    filterByMonth.value ||
     keyword.value.trim().length > 0 ||
     excludedIds.value.size > 0,
 );
 function clearAll(): void {
+  filterByMonth.value = false;
   selectedTypes.value = [];
   selectedAccountIds.value = [];
   selectedCategoryNames.value = [];
@@ -731,6 +746,10 @@ function clearAll(): void {
       </button>
 
       <span class="filter-sep" aria-hidden="true"></span>
+      <label class="month-filter">
+        <input type="checkbox" v-model="filterByMonth" />
+        是否按选中月份过滤
+      </label>
 
       <!-- 可叠加筛选 chips（× 可 Tab 聚焦 + Enter/空格删除） -->
       <span v-for="t in selectedTypes" :key="'ty-' + t" class="chip chip-on">
@@ -1310,6 +1329,15 @@ function clearAll(): void {
 }
 
 /* 搜索范围：字段多选 pill 行（复用 .pill / .pill-active）。 */
+.month-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-2);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.month-filter input { accent-color: var(--primary); }
 .scope-row {
   display: flex;
   align-items: center;

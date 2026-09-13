@@ -16,6 +16,7 @@
 //   账户/分类管理（S4）与深度分析（S10）不在本阶段。
 // ============================================================
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useSelectedMonth } from '../composables/useSelectedMonth';
 import { useRouter } from 'vue-router';
 import {
   accountService,
@@ -37,52 +38,7 @@ function openEdit(id: Id): void {
   void router.push(`/txn/${id}/edit`);
 }
 
-// ---------- 月份状态（默认本月） ----------
-const now = new Date();
-const year = ref(now.getFullYear());
-const month = ref(now.getMonth()); // 0-based
-
-const monthLabel = computed(() => `${year.value}年${month.value + 1}月`);
-
-// 当月区间：[timeFrom, timeTo]。query/summary 的 timeTo 用 `time <= ?`（闭区间），
-// 故 timeTo 取「次月 1 号 00:00 减 1ms」，避免把次月第一天算进来或漏掉当月最后一刻。
-const timeFrom = computed(() => new Date(year.value, month.value, 1, 0, 0, 0, 0).getTime());
-const timeTo = computed(() => new Date(year.value, month.value + 1, 1, 0, 0, 0, 0).getTime() - 1);
-
-// 是否已到达（真实）本月：到本月则禁用「下一月」，未来没有数据。
-const atCurrentMonth = computed(
-  () => year.value === now.getFullYear() && month.value === now.getMonth(),
-);
-
-// 最早有交易记录的月份（本地口径 year*12+month），无任何交易时为 null。挂载时算一次，
-// 与 now 一样是进页时的快照；页面无 keep-alive，每次进入 Overview 都会重新加载刷新。
-const earliestMonthIndex = ref<number | null>(null);
-const currentMonthIndex = computed(() => year.value * 12 + month.value);
-
-// 是否已到达最早有记录的月份：到该月（或更早、或全账本无交易）则禁用「上一月」，
-// 与「下一月」在本月封顶对称——只能在有交易记录的月份范围内左右切换。
-const atEarliestMonth = computed(
-  () => earliestMonthIndex.value === null || currentMonthIndex.value <= earliestMonthIndex.value,
-);
-
-function prevMonth(): void {
-  if (atEarliestMonth.value) return;
-  if (month.value === 0) {
-    month.value = 11;
-    year.value -= 1;
-  } else {
-    month.value -= 1;
-  }
-}
-function nextMonth(): void {
-  if (atCurrentMonth.value) return;
-  if (month.value === 11) {
-    month.value = 0;
-    year.value += 1;
-  } else {
-    month.value += 1;
-  }
-}
+const { timeFrom, timeTo, periodLabel } = useSelectedMonth();
 
 // ---------- 数据源 ----------
 const summary = ref<Summary>({ income: 0, expense: 0, net: 0 });
@@ -113,64 +69,33 @@ async function loadStatic(): Promise<void> {
     balMap.set(acc.id, await accountService.balance(acc.id));
   }
   balanceById.value = balMap;
-
-  // 最早一笔（未软删）交易的本地年月，用于给「上一月」封底——只能切到有记录的月份。
-  // 排除专项账户交易：概览是日常口径，月份导航下界不应被专项旧交易拉长。
-  const [earliest] = await txnService.query({
-    sortBy: 'time',
-    sortDir: 'asc',
-    limit: 1,
-    excludeProjects: true,
-  });
-  if (earliest) {
-    const d = new Date(earliest.time);
-    earliestMonthIndex.value = d.getFullYear() * 12 + d.getMonth();
-  } else {
-    earliestMonthIndex.value = null;
-  }
 }
 
 /** 随月份变化：三卡汇总 + 本月流水。均排除专项账户交易（日常口径）。 */
+let monthRequest = 0;
 async function loadMonth(): Promise<void> {
+  const request = ++monthRequest;
   loading.value = true;
   try {
     const q = { timeFrom: timeFrom.value, timeTo: timeTo.value, excludeProjects: true };
-    summary.value = await statsService.summary(q);
-    txns.value = await txnService.query({
-      ...q,
-      sortBy: 'time',
-      sortDir: 'desc',
-    });
+    const [nextSummary, nextTxns] = await Promise.all([
+      statsService.summary(q),
+      txnService.query({ ...q, sortBy: 'time', sortDir: 'desc' }),
+    ]);
+    if (request !== monthRequest) return;
+    summary.value = nextSummary;
+    txns.value = nextTxns;
   } finally {
-    loading.value = false;
+    if (request === monthRequest) loading.value = false;
   }
 }
 
 onMounted(async () => {
   await loadStatic();
   await loadMonth();
-  window.addEventListener('keydown', onMonthKeydown);
 });
 
-onUnmounted(() => {
-  window.removeEventListener('keydown', onMonthKeydown);
-});
-
-// 桌面键盘：← / → 切上/下一月（尊重 atEarliestMonth/atCurrentMonth 边界）。
-// 仅在概览页挂载期间生效（onUnmounted 摘除），不影响其他页的 tab 切换。
-// 输入框/文本域聚焦时豁免，避免与文本内的光标移动抢键。
-function onMonthKeydown(e: KeyboardEvent): void {
-  if (e.metaKey || e.ctrlKey || e.altKey) return;
-  const el = e.target as HTMLElement | null;
-  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
-  if (e.key === 'ArrowLeft') {
-    prevMonth();
-    e.preventDefault();
-  } else if (e.key === 'ArrowRight') {
-    nextMonth();
-    e.preventDefault();
-  }
-}
+onUnmounted(() => { monthRequest++; });
 
 // 月份切换后刷新三卡与流水（余额全期口径，无需随月刷新）。
 watch([timeFrom, timeTo], () => {
@@ -304,15 +229,6 @@ function txnAmountClass(t: TxnWithTags): string {
 
 <template>
   <div class="content">
-    <!-- 月份切换：投放到顶栏（与页标题同高、右对齐），页内不再单独占一行。 -->
-    <Teleport to="#topbar-slot">
-      <div class="month-switch">
-        <button aria-label="上一月（← 键）" :disabled="atEarliestMonth" @click="prevMonth">‹</button>
-        <span class="m-label">{{ monthLabel }}</span>
-        <button aria-label="下一月（→ 键）" :disabled="atCurrentMonth" @click="nextMonth">›</button>
-        <span class="kbd-hint month-kbd" aria-hidden="true"><span class="kbd">←</span><span class="kbd">→</span></span>
-      </div>
-    </Teleport>
 
     <!-- 汇总三卡 -->
     <div class="grid g-3">
@@ -321,7 +237,7 @@ function txnAmountClass(t: TxnWithTags): string {
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 2v20M17 7H9.5a2.5 2.5 0 0 0 0 5h5a2.5 2.5 0 0 1 0 5H6" />
           </svg>
-          本月净额
+          {{ periodLabel }}净额
         </div>
         <div class="s-value num" :class="netPositive ? 'pos' : 'neg'">
           {{ format(summary.net, { sign: true }) }}
@@ -336,7 +252,7 @@ function txnAmountClass(t: TxnWithTags): string {
           总收入
         </div>
         <div class="s-value num pos">{{ format(summary.income, { sign: true }) }}</div>
-        <div class="s-trend">本月流入（不含转账）</div>
+        <div class="s-trend">{{ periodLabel }}流入（不含转账）</div>
       </div>
       <div class="stat">
         <div class="s-label">
@@ -346,7 +262,7 @@ function txnAmountClass(t: TxnWithTags): string {
           总支出
         </div>
         <div class="s-value num neg">−{{ format(summary.expense) }}</div>
-        <div class="s-trend">本月流出（不含转账）</div>
+        <div class="s-trend">{{ periodLabel }}流出（不含转账）</div>
       </div>
     </div>
 
@@ -354,7 +270,7 @@ function txnAmountClass(t: TxnWithTags): string {
       <!-- 左：本月流水 -->
       <div class="card">
         <div class="card-head">
-          <h3>本月流水</h3>
+          <h3>{{ periodLabel }}流水</h3>
           <span class="faint" style="font-size: 13px">按日期分组</span>
         </div>
         <div class="card-pad" style="padding-top: 4px">
@@ -364,7 +280,7 @@ function txnAmountClass(t: TxnWithTags): string {
               <rect x="3" y="4" width="18" height="16" rx="2" />
               <path d="M3 9h18M8 14h8" />
             </svg>
-            <div style="font-weight: 700; color: var(--fg-2)">本月还没有记账</div>
+            <div style="font-weight: 700; color: var(--fg-2)">{{ periodLabel }}还没有记账</div>
             <RouterLink to="/add" class="btn btn-secondary btn-sm mt-3">去记一笔</RouterLink>
           </div>
 
@@ -464,26 +380,6 @@ function txnAmountClass(t: TxnWithTags): string {
 </template>
 
 <style scoped>
-/* 顶栏月份切换：绝对定位居中于整条顶栏（不受左侧标题 / 右侧 slot 影响）。
-   仅作用于概览页投放的 .month-switch（scoped data-v 随 teleport 元素保留），
-   账户页的 .subtabs 仍走 .topbar-slot 的右对齐，互不干扰。 */
-#topbar-slot .month-switch {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-}
-/* 快捷键提示贴在月份条右侧、绝对定位，不参与居中盒宽度，
-   保证「概览月份条居中」不因提示而偏移（AGENTS 约定）。 */
-#topbar-slot .month-switch .month-kbd {
-  position: absolute;
-  left: 100%;
-  margin-left: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  white-space: nowrap;
-}
-
 /* S7.1：流水行备注（层级低于 .txn-sub 的最次要一行；单行省略，悬停看全文）。
    .txn-sub 用 --fg-3，本行叠加 opacity 再淡一级，不硬编码色值。 */
 .txn-note {

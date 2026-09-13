@@ -31,7 +31,8 @@
 //   · 金额一律 Cents，展示只经 money.format，禁手写 /100。
 //   · 只写页面层：不改 src/services/** 与 src/db/**，服务层只当消费方调用。
 // ============================================================
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useSelectedMonth } from '../composables/useSelectedMonth';
 import { useRoute, useRouter } from 'vue-router';
 import {
   accountService,
@@ -51,6 +52,11 @@ import {
 
 // ---------- 次级 tab ----------
 const tab = ref<'accounts' | 'tags'>('accounts');
+const headerMedia = window.matchMedia('(max-width: 720px)');
+const compactHeader = ref(headerMedia.matches);
+function onHeaderChange(event: MediaQueryListEvent): void {
+  compactHeader.value = event.matches;
+}
 
 const router = useRouter();
 const route = useRoute();
@@ -73,10 +79,7 @@ function openEdit(id: Id): void {
   void router.push(`/txn/${id}/edit`);
 }
 
-// ---------- 本月区间（当前自然月，边界同 S3：timeTo = 次月1号 − 1ms） ----------
-const now = new Date();
-const timeFrom = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0).getTime();
-const timeTo = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0).getTime() - 1;
+const { timeFrom, timeTo, periodLabel } = useSelectedMonth();
 
 // ---------- 数据源 ----------
 const accounts = ref<Account[]>([]);
@@ -88,7 +91,6 @@ const tags = ref<Tag[]>([]);
 const selectedAccountId = ref<Id | null>(null);
 const selectedCategories = ref<Category[]>([]); // 右栏分类网格（可拖拽重排）
 const monthTxns = ref<TxnWithTags[]>([]); // 本月该账户相关交易（算流入/流出、分类小计）
-const allTxns = ref<TxnWithTags[]>([]); // 该账户全部交易（明细列表）
 const categoryFilterId = ref<Id | null>(null); // 明细按分类筛选（null = 全部）；点分类网格切换
 
 // ---------- UI 状态 ----------
@@ -238,19 +240,30 @@ async function reloadAccounts(): Promise<void> {
   }
 }
 
-/** 选中账户详情：本月交易（流入/流出、分类小计）+ 全部交易（明细）+ 分类网格。 */
+let detailRequest = 0;
+const detailLoading = ref(false);
 async function reloadDetail(): Promise<void> {
+  const request = ++detailRequest;
   const id = selectedAccountId.value;
+  selectedCategories.value = id ? categoriesByAccount.value.get(id) ?? [] : [];
+  monthTxns.value = [];
   if (!id) {
-    selectedCategories.value = [];
-    monthTxns.value = [];
-    allTxns.value = [];
+    detailLoading.value = false;
     return;
   }
-  selectedCategories.value = categoriesByAccount.value.get(id) ?? [];
-  monthTxns.value = await txnService.query({ accountIds: [id], timeFrom, timeTo });
-  allTxns.value = await txnService.query({ accountIds: [id], sortBy: 'time', sortDir: 'desc' });
+  detailLoading.value = true;
+  try {
+    const result = await txnService.query({
+      accountIds: [id], timeFrom: timeFrom.value, timeTo: timeTo.value,
+      sortBy: 'time', sortDir: 'desc',
+    });
+    if (request === detailRequest) monthTxns.value = result;
+  } finally {
+    if (request === detailRequest) detailLoading.value = false;
+  }
 }
+
+watch([timeFrom, timeTo], () => void reloadDetail());
 
 async function reloadTags(): Promise<void> {
   tags.value = await tagService.list();
@@ -270,6 +283,8 @@ function toggleCategoryFilter(catId: Id): void {
 }
 
 onMounted(async () => {
+  window.addEventListener('keydown', onGlobalKeydown);
+  headerMedia.addEventListener('change', onHeaderChange);
   // 从 URL query 预置选中账户：reloadAccounts 内的存在性兜底会校验其有效性
   //（query 账户已被删/不存在 → 自动回退到第一个账户）。
   const qAccount = route.query.account;
@@ -288,10 +303,11 @@ onMounted(async () => {
   await reloadDetail();
   // query 里可能残留失效的 account/cat（已删除等）→ 用兜底后的真实状态回写，保持 URL 一致。
   syncQuery();
-  window.addEventListener('keydown', onGlobalKeydown);
 });
 
 onUnmounted(() => {
+  detailRequest++;
+  headerMedia.removeEventListener('change', onHeaderChange);
   window.removeEventListener('keydown', onGlobalKeydown);
 });
 
@@ -727,8 +743,8 @@ const filteredCategory = computed<Category | null>(() =>
 /** 明细列表数据源：按选中分类过滤（null = 全部）。 */
 const filteredTxns = computed<TxnWithTags[]>(() => {
   const cid = categoryFilterId.value;
-  if (!cid) return allTxns.value;
-  return allTxns.value.filter((t) => t.categoryId === cid);
+  if (!cid) return monthTxns.value;
+  return monthTxns.value.filter((t) => t.categoryId === cid);
 });
 
 const groups = computed<DayGroup[]>(() => {
@@ -806,8 +822,7 @@ function txnAmountClass(t: TxnWithTags): string {
 
 <template>
   <div class="content acc-content">
-    <!-- 账户 / 标签 次级 tab：投放到顶栏（与页标题同高、右对齐），页内不再单独占一行。 -->
-    <Teleport to="#topbar-slot">
+    <Teleport to="#topbar-slot" :disabled="compactHeader">
       <div class="subtabs">
         <button class="subtab" :class="{ on: tab === 'accounts' }" @click="tab = 'accounts'">账户</button>
         <button class="subtab" :class="{ on: tab === 'tags' }" @click="tab = 'tags'">标签</button>
@@ -932,8 +947,8 @@ function txnAmountClass(t: TxnWithTags): string {
             </button>
           </div>
           <div class="row gap-4 mt-4" style="font-size: 13px; flex-wrap: wrap">
-            <span style="opacity: 0.95">本月流入 <b class="num">+{{ format(monthFlow.inflow) }}</b></span>
-            <span style="opacity: 0.9">本月流出 <b class="num">−{{ format(monthFlow.outflow) }}</b></span>
+            <span style="opacity: 0.95">{{ periodLabel }}流入 <b class="num">+{{ format(monthFlow.inflow) }}</b></span>
+            <span style="opacity: 0.9">{{ periodLabel }}流出 <b class="num">−{{ format(monthFlow.outflow) }}</b></span>
           </div>
         </div>
 
@@ -994,7 +1009,7 @@ function txnAmountClass(t: TxnWithTags): string {
         <!-- (c) 该账户交易明细 -->
         <div class="card">
           <div class="card-head">
-            <h3>该账户交易明细</h3>
+            <h3>{{ periodLabel }}交易明细</h3>
             <button
               v-if="filteredCategory"
               class="filter-chip"
@@ -1008,9 +1023,9 @@ function txnAmountClass(t: TxnWithTags): string {
             <span v-else class="faint" style="font-size: 13px">仅显示「{{ selectedAccount.name }}」</span>
           </div>
           <div class="card-pad" style="padding-top: 4px">
-            <div v-if="groups.length === 0" class="empty" style="padding: 28px 12px">
-              <div v-if="filteredCategory" style="font-weight: 700; color: var(--fg-2)">该分类下暂无交易</div>
-              <div v-else style="font-weight: 700; color: var(--fg-2)">该账户还没有交易</div>
+            <div v-if="detailLoading" class="empty" style="padding: 28px 12px">加载中…</div>
+            <div v-else-if="groups.length === 0" class="empty" style="padding: 28px 12px">
+              <div style="font-weight: 700; color: var(--fg-2)">{{ periodLabel }}{{ filteredCategory ? '该分类下' : '该账户' }}暂无交易</div>
             </div>
             <template v-for="g in groups" :key="g.key">
               <div class="day-head">
@@ -1262,7 +1277,12 @@ function txnAmountClass(t: TxnWithTags): string {
   text-overflow: ellipsis;
 }
 
-/* 次级 tab（已投放到顶栏 #topbar-slot；顶栏用 flex 居中，无需下外边距） */
+@media (max-width: 720px) {
+  .acc-content > .subtabs { margin-bottom: 16px; }
+}
+@media (min-width: 721px) and (max-width: 960px) {
+  .subtabs .subtab { padding-inline: 10px; }
+}
 .subtabs {
   display: inline-flex;
   gap: 4px;

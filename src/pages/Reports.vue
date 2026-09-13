@@ -39,63 +39,14 @@ import {
   type TxnWithTags,
 } from '../services';
 import { bucketOf } from '../services/stats';
+import { useReportRange, type RangeMode } from '../composables/useReportRange';
 
 const UNCATEGORIZED = '未分类';
 
 // ============================================================
 // 时间范围（§4.3：本月 / 近30天 / 本年 / 自定义；闭区间 timeTo=次月1号−1ms）
 // ============================================================
-type RangeMode = 'month' | '30d' | 'year' | 'custom';
-const rangeMode = ref<RangeMode>('month');
-const customFrom = ref<string>(''); // yyyy-mm-dd
-const customTo = ref<string>('');
-
-const now = new Date();
-
-/** 某天 00:00:00.000 的 epoch（本地时区）。 */
-function startOfDay(y: number, m: number, d: number): number {
-  return new Date(y, m, d, 0, 0, 0, 0).getTime();
-}
-
-const timeFrom = computed<number>(() => {
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const d = now.getDate();
-  switch (rangeMode.value) {
-    case 'month':
-      return startOfDay(y, m, 1);
-    case '30d':
-      // 近 30 天：含今天在内共 30 天。
-      return startOfDay(y, m, d) - 29 * 86400000;
-    case 'year':
-      return startOfDay(y, 0, 1);
-    case 'custom': {
-      if (!customFrom.value) return startOfDay(y, m, 1);
-      const [cy, cm, cd] = customFrom.value.split('-').map(Number);
-      return startOfDay(cy, cm - 1, cd);
-    }
-  }
-});
-
-const timeTo = computed<number>(() => {
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const d = now.getDate();
-  switch (rangeMode.value) {
-    case 'month':
-      // 次月 1 号 00:00 减 1ms（闭区间末刻，避免 23:59:59 的毫秒/闰秒边界丢数据）。
-      return startOfDay(y, m + 1, 1) - 1;
-    case '30d':
-      return startOfDay(y, m, d + 1) - 1; // 今天末刻
-    case 'year':
-      return startOfDay(y + 1, 0, 1) - 1;
-    case 'custom': {
-      if (!customTo.value) return startOfDay(y, m + 1, 1) - 1;
-      const [cy, cm, cd] = customTo.value.split('-').map(Number);
-      return startOfDay(cy, cm - 1, cd + 1) - 1; // 自定义终点当天末刻
-    }
-  }
-});
+const { rangeMode, customFrom, customTo, timeFrom, timeTo } = useReportRange();
 
 /** 趋势粒度随范围跨度：≤ ~45 天用日，更长用月（§4.3）。 */
 const granularity = computed<'day' | 'month'>(() => {
@@ -212,50 +163,47 @@ const activeQuery = computed<TxnQuery>(() => {
   return q;
 });
 
+let loadRequest = 0;
 async function load(): Promise<void> {
+  const request = ++loadRequest;
   loading.value = true;
   try {
-    txns.value = await txnService.query(activeQuery.value);
+    const result = await txnService.query(activeQuery.value);
+    if (request === loadRequest) txns.value = result;
   } finally {
-    loading.value = false;
+    if (request === loadRequest) loading.value = false;
   }
 }
 
 onMounted(async () => {
+  window.addEventListener('keydown', onReportsKeydown);
   await loadStatic();
   await load();
-  window.addEventListener('keydown', onReportsKeydown);
 });
 
 onUnmounted(() => {
+  loadRequest++;
   window.removeEventListener('keydown', onReportsKeydown);
 });
 
-// 桌面键盘：← / → 在时间范围 tab（本月/近30天/本年/自定义）间循环切换；
-//   Esc 关闭「添加条件」浮层（先返回二级维度，再整体关闭）。
-//   输入框/文本域（自定义日期、金额范围输入）聚焦时豁免方向键，Esc 仍可关浮层。
 function onReportsKeydown(e: KeyboardEvent): void {
-  if (e.altKey) return;
-  const el = e.target as HTMLElement | null;
-  const inField =
-    !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
-  if (e.key === 'Escape') {
-    if (addOpen.value) {
-      if (addDim.value !== null) addDim.value = null;
-      else closeAdd();
-      e.preventDefault();
-    }
-    return;
-  }
-  if (inField || e.metaKey || e.ctrlKey) return;
-  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-    const idx = RANGE_TABS.findIndex((t) => t.v === rangeMode.value);
-    const len = RANGE_TABS.length;
-    const next = e.key === 'ArrowRight' ? (idx + 1) % len : (idx - 1 + len) % len;
-    const tab = RANGE_TABS[next];
-    if (tab) rangeMode.value = tab.v;
+  if (e.altKey || e.isComposing) return;
+  if (e.key === 'Escape' && addOpen.value) {
+    if (addDim.value !== null) addDim.value = null;
+    else closeAdd();
     e.preventDefault();
   }
+}
+
+function onRangeKeydown(e: KeyboardEvent): void {
+  if (e.altKey || e.metaKey || e.ctrlKey || e.shiftKey || e.isComposing) return;
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  const idx = RANGE_TABS.findIndex((t) => t.v === rangeMode.value);
+  const next = (idx + (e.key === 'ArrowRight' ? 1 : -1) + RANGE_TABS.length) % RANGE_TABS.length;
+  rangeMode.value = RANGE_TABS[next].v;
+  (e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('button')[next]?.focus();
+  e.preventDefault();
+  e.stopPropagation();
 }
 
 // 任一筛选/范围/排序变化 → 重查（唯一真相源刷新，下游 computed 自动重算）。
@@ -489,18 +437,21 @@ function clearAll(): void {
   <div class="content reports">
     <!-- 顶部：时间范围选择器 -->
     <div class="rep-head">
-      <div class="range-tabs">
+      <div class="range-tabs" role="tablist" aria-label="报告时间范围" @keydown="onRangeKeydown">
         <button
           v-for="tab in RANGE_TABS"
           :key="tab.v"
           class="range-tab"
+          role="tab"
+          :aria-selected="rangeMode === tab.v"
+          :tabindex="rangeMode === tab.v ? 0 : -1"
           :class="{ on: rangeMode === tab.v }"
           @click="rangeMode = tab.v"
         >
           {{ tab.label }}
         </button>
       </div>
-      <span class="kbd-hint range-kbd" aria-hidden="true"><span class="kbd">←</span><span class="kbd">→</span>切换范围</span>
+      <span class="kbd-hint range-kbd" aria-hidden="true">聚焦后 <span class="kbd">←</span><span class="kbd">→</span>切换范围</span>
       <div v-if="rangeMode === 'custom'" class="row gap-2 custom-range">
         <input type="date" class="input date-input" v-model="customFrom" aria-label="起始日期" />
         <span class="faint">至</span>

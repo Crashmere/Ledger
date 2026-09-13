@@ -12,6 +12,7 @@
 import { computed, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import ToastHost from './components/ToastHost.vue';
+import MonthSwitch from './components/MonthSwitch.vue';
 import { useAutoSync } from './composables/useAutoSync';
 
 const route = useRoute();
@@ -63,6 +64,7 @@ onUnmounted(() => {
 
 // 顶栏标题：优先用路由 meta.title，兜底用"记账"。
 const pageTitle = computed(() => (route.meta.title as string | undefined) ?? '记账');
+const hasMonthSwitch = computed(() => ['overview', 'accounts', 'reports', 'search'].includes(String(route.name)));
 
 // 记一笔快捷键提示文案：Mac 显示 ⌥N（Option），其余平台显示 Alt+N。仅桌面端可见。
 const addShortcutLabel = computed(() =>
@@ -179,9 +181,7 @@ const tabItems = navItems.filter((i) => i.to !== '/search');
           </svg>
         </button>
         <div class="page-title">{{ pageTitle }}</div>
-        <!-- 页面级顶栏控制区：各页用 <Teleport to="#topbar-slot"> 把自己的控制条
-             （概览月份切换 / 账户·标签选择器等）投放到此，与页标题同高、右对齐。
-             桌面右上角原「搜索交易…」框已移除（无实际搜索能力）；手机端仍保留放大镜入口。 -->
+        <MonthSwitch v-if="hasMonthSwitch" class="topbar-month" />
         <div id="topbar-slot" class="topbar-slot"></div>
         <!-- S11 手机端：桌面搜索框在窄屏收起为放大镜图标，点击进搜索页（§二.3）。桌面下 display:none。 -->
         <RouterLink to="/search" class="m-search-btn" aria-label="搜索">

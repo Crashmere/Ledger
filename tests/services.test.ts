@@ -624,6 +624,30 @@ describe('专项账户 kind 与 excludeProjects 排除', () => {
     expect((await txns.query({ ...query, limit: 1, offset: 1 })).map((t) => t.id)).toEqual([first.id]);
   });
 
+  it('月份闭区间与账户、专项及分类筛选叠加，不带入相邻月交易', async () => {
+    const normal = await accounts.create({ name: '日常', color: 1 });
+    const project = await accounts.create({ name: '旅行', color: 2, kind: 'project' });
+    const category = await categories.create({ accountId: normal.id, name: '交通', color: 1 });
+    const timeFrom = new Date(2024, 1, 1).getTime();
+    const timeTo = new Date(2024, 2, 1).getTime() - 1;
+    const [before, first, last, after, special, transfer] = await txns.createMany([
+      { type: 'expense', amount: 10, accountId: normal.id, categoryId: category.id, time: timeFrom - 1 },
+      { type: 'expense', amount: 100, accountId: normal.id, categoryId: category.id, time: timeFrom },
+      { type: 'expense', amount: 200, accountId: normal.id, categoryId: category.id, time: timeTo },
+      { type: 'expense', amount: 20, accountId: normal.id, categoryId: category.id, time: timeTo + 1 },
+      { type: 'expense', amount: 300, accountId: project.id, time: timeFrom },
+      { type: 'transfer', amount: 50, accountId: normal.id, toAccountId: project.id, time: timeFrom },
+    ]);
+    const ids = (rows: { id: string }[]) => rows.map(t => t.id).sort();
+    const range = { timeFrom, timeTo };
+    expect(ids(await txns.query({ ...range, accountIds: [normal.id] }))).toEqual(ids([first, last, transfer]));
+    expect(ids(await txns.query({ ...range, categoryIds: [category.id] }))).toEqual(ids([first, last]));
+    expect(ids(await txns.query({ ...range, excludeUnselectedProjects: true }))).toEqual(ids([first, last]));
+    expect(ids(await txns.query({ ...range, excludeUnselectedProjects: true, accountIds: [project.id] }))).toEqual(ids([special, transfer]));
+    expect(ids(await txns.query({ excludeUnselectedProjects: true }))).toEqual(ids([before, first, last, after]));
+    expect((await stats.summary({ ...range, excludeProjects: true })).expense).toBe(300);
+  });
+
   it('stats.summary/breakdown/trend excludeProjects：专项支出不进日常口径', async () => {
     const normal = await accounts.create({ name: '日常', color: 1 });
     const proj = await accounts.create({ name: '旅行', color: 2, kind: 'project' });
