@@ -776,12 +776,11 @@ function clearAll(): void {
 .category-breakdown .card-head { flex-wrap: wrap; gap: 8px; }
 .category-content {
   display: grid;
-  grid-template-columns: 200px minmax(0, 532px);
-  justify-content: center;
-  align-items: start;
+  grid-template-columns: 200px minmax(0, 1fr);
+  align-items: center;
   gap: 32px;
 }
-.category-chart { display: flex; justify-content: center; padding-top: 4px; }
+.category-chart { display: flex; justify-content: center; }
 .category-detail { min-width: 0; }
 .category-detail-head {
   display: flex;
@@ -837,7 +836,7 @@ function clearAll(): void {
 .stat { min-width: 0; overflow-wrap: anywhere; }
 
 @media (max-width: 960px) {
-  .category-content { grid-template-columns: minmax(0, 532px); gap: 24px; }
+  .category-content { grid-template-columns: minmax(0, 1fr); gap: 24px; }
 }
 
 @media (min-width: 721px) and (max-width: 960px) {
