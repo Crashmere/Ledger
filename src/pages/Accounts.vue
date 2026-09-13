@@ -6,7 +6,7 @@
 //   顶部「账户 / 标签」次级 tab（页面内状态，不新增路由）。
 //   账户视图（双栏）：
 //     左 = 账户列表（选中态 + 拖拽排序 + 新建）；
-//     右 = 选中账户详情三卡：①头部色块卡（余额 + 本月流入/流出）
+//     右 = 选中账户详情三卡：①头部色块卡（余额 + 当前范围流入/流出）
 //          ②账户内分类网格（增/改/删/排序，accountId 固定当前账户）
 //          ③该账户交易明细（按日期分组，复用概览的符号/色逻辑）。
 //   标签视图：全局标签 CRUD（标签不归属账户，故单独一个 tab）。
@@ -14,7 +14,7 @@
 // 红线：
 //   ② 分类归属账户：右栏分类只列当前选中账户，新建分类 accountId 固定当前账户。
 //   ③ 转账账户内计入：账户明细里"转入本账户"的转账也出现（query 已用
-//      account_id OR to_account_id 命中）；本月流入/流出必须含转账。
+//      account_id OR to_account_id 命中）；当前范围流入/流出必须含转账。
 //   ⑤ 界面不出现"记账人/成员/协作/TA"字样。
 //   删除连锁三分支（本阶段核心）：
 //     · 删账户 = RESTRICT：AccountService.remove 抛 AppError('RESTRICT')，
@@ -23,8 +23,8 @@
 //     · 删标签 = CASCADE：关联清除、交易保留。删前二次确认。
 //
 // 口径要点（坑位）：
-//   · 本月流入/流出【禁用 summary】（summary 排除转账），用 TxnService.query
-//     取本月该账户交易后前端聚合：流入 = income + 转入本账户的 transfer；
+//   · 当前范围流入/流出【禁用 summary】（summary 排除转账），用 TxnService.query
+//     取当前范围该账户交易后前端聚合：流入 = income + 转入本账户的 transfer；
 //     流出 = expense + 从本账户转出的 transfer。
 //   · 月份边界与 S3 一致：timeTo = 次月1号00:00 − 1ms（服务层 time <= ? 闭区间）。
 //   · 颜色是 ARGB 整数，渲染取低 24 位（复用 argbToCss）；表单选色转回整数存。
@@ -32,7 +32,7 @@
 //   · 只写页面层：不改 src/services/** 与 src/db/**，服务层只当消费方调用。
 // ============================================================
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { useSelectedMonth } from '../composables/useSelectedMonth';
+import { useAccountRange } from '../composables/useAccountRange';
 import { useRoute, useRouter } from 'vue-router';
 import {
   accountService,
@@ -79,8 +79,6 @@ function openEdit(id: Id): void {
   void router.push(`/txn/${id}/edit`);
 }
 
-const { timeFrom, timeTo, periodLabel } = useSelectedMonth();
-
 // ---------- 数据源 ----------
 const accounts = ref<Account[]>([]);
 const balanceById = ref<Map<Id, number>>(new Map());
@@ -90,7 +88,7 @@ const tags = ref<Tag[]>([]);
 
 const selectedAccountId = ref<Id | null>(null);
 const selectedCategories = ref<Category[]>([]); // 右栏分类网格（可拖拽重排）
-const monthTxns = ref<TxnWithTags[]>([]); // 本月该账户相关交易（算流入/流出、分类小计）
+const accountTxns = ref<TxnWithTags[]>([]); // 当前范围该账户相关交易（算流入/流出、分类小计）
 const categoryFilterId = ref<Id | null>(null); // 明细按分类筛选（null = 全部）；点分类网格切换
 
 // ---------- UI 状态 ----------
@@ -149,6 +147,9 @@ const projectAccounts = computed(() => accounts.value.filter((a) => a.kind === '
 
 /** 当前选中账户是否专项账户（决定右栏是否显示时间段/归档信息）。 */
 const isProjectSelected = computed(() => selectedAccount.value?.kind === 'project');
+const { filterByMonth, timeFrom, timeTo, periodLabel } = useAccountRange(
+  computed(() => selectedAccount.value?.kind),
+);
 
 /** 把 epoch ms 格式化成 yyyy-mm-dd（本地时区）用于展示与 date input 回填。 */
 function fmtDateInput(ms: number | null): string {
@@ -183,13 +184,13 @@ const totalBalance = computed(() => {
   return sum;
 });
 
-/** 本月流入/流出（含转账，禁用 summary）：对 monthTxns 前端聚合。 */
-const monthFlow = computed(() => {
+/** 当前范围流入/流出（含转账，禁用 summary）：对 accountTxns 前端聚合。 */
+const accountFlow = computed(() => {
   const id = selectedAccountId.value;
   let inflow = 0;
   let outflow = 0;
   if (!id) return { inflow, outflow };
-  for (const t of monthTxns.value) {
+  for (const t of accountTxns.value) {
     if (t.type === 'income' && t.accountId === id) inflow += t.amount;
     else if (t.type === 'expense' && t.accountId === id) outflow += t.amount;
     else if (t.type === 'transfer') {
@@ -246,7 +247,7 @@ async function reloadDetail(): Promise<void> {
   const request = ++detailRequest;
   const id = selectedAccountId.value;
   selectedCategories.value = id ? categoriesByAccount.value.get(id) ?? [] : [];
-  monthTxns.value = [];
+  accountTxns.value = [];
   if (!id) {
     detailLoading.value = false;
     return;
@@ -257,7 +258,7 @@ async function reloadDetail(): Promise<void> {
       accountIds: [id], timeFrom: timeFrom.value, timeTo: timeTo.value,
       sortBy: 'time', sortDir: 'desc',
     });
-    if (request === detailRequest) monthTxns.value = result;
+    if (request === detailRequest) accountTxns.value = result;
   } finally {
     if (request === detailRequest) detailLoading.value = false;
   }
@@ -716,10 +717,10 @@ function categoryName(id: Id | null): string {
   return categoryById.value.get(id)?.name ?? '';
 }
 
-/** 某分类本月支出小计（分）：从 monthTxns 聚合（只算 expense）。 */
-function categoryMonthExpense(catId: Id): number {
+/** 某分类当前范围支出小计（分）：从 accountTxns 聚合（只算 expense）。 */
+function categoryExpense(catId: Id): number {
   let sum = 0;
-  for (const t of monthTxns.value) {
+  for (const t of accountTxns.value) {
     if (t.type === 'expense' && t.categoryId === catId) sum += t.amount;
   }
   return sum;
@@ -743,8 +744,8 @@ const filteredCategory = computed<Category | null>(() =>
 /** 明细列表数据源：按选中分类过滤（null = 全部）。 */
 const filteredTxns = computed<TxnWithTags[]>(() => {
   const cid = categoryFilterId.value;
-  if (!cid) return monthTxns.value;
-  return monthTxns.value.filter((t) => t.categoryId === cid);
+  if (!cid) return accountTxns.value;
+  return accountTxns.value.filter((t) => t.categoryId === cid);
 });
 
 const groups = computed<DayGroup[]>(() => {
@@ -947,8 +948,8 @@ function txnAmountClass(t: TxnWithTags): string {
             </button>
           </div>
           <div class="row gap-4 mt-4" style="font-size: 13px; flex-wrap: wrap">
-            <span style="opacity: 0.95">{{ periodLabel }}流入 <b class="num">+{{ format(monthFlow.inflow) }}</b></span>
-            <span style="opacity: 0.9">{{ periodLabel }}流出 <b class="num">−{{ format(monthFlow.outflow) }}</b></span>
+            <span style="opacity: 0.95">{{ periodLabel }}流入 <b class="num">+{{ format(accountFlow.inflow) }}</b></span>
+            <span style="opacity: 0.9">{{ periodLabel }}流出 <b class="num">−{{ format(accountFlow.outflow) }}</b></span>
           </div>
         </div>
 
@@ -984,8 +985,8 @@ function txnAmountClass(t: TxnWithTags): string {
                 </div>
                 <div style="min-width: 0; flex: 1">
                   <div style="font-weight: 600; font-size: 13px" class="ellipsis">{{ cat.name }}</div>
-                  <div v-if="categoryMonthExpense(cat.id) > 0" class="num neg" style="font-size: 11px">
-                    −{{ format(categoryMonthExpense(cat.id)) }}
+                  <div v-if="categoryExpense(cat.id) > 0" class="num neg" style="font-size: 11px">
+                    −{{ format(categoryExpense(cat.id)) }}
                   </div>
                 </div>
                 <div class="cat-actions">
@@ -1025,7 +1026,7 @@ function txnAmountClass(t: TxnWithTags): string {
           <div class="card-pad" style="padding-top: 4px">
             <div v-if="detailLoading" class="empty" style="padding: 28px 12px">加载中…</div>
             <div v-else-if="groups.length === 0" class="empty" style="padding: 28px 12px">
-              <div style="font-weight: 700; color: var(--fg-2)">{{ periodLabel }}{{ filteredCategory ? '该分类下' : '该账户' }}暂无交易</div>
+              <div style="font-weight: 700; color: var(--fg-2)">{{ filterByMonth ? periodLabel : '' }}{{ filteredCategory ? '该分类下' : '该账户' }}暂无交易</div>
             </div>
             <template v-for="g in groups" :key="g.key">
               <div class="day-head">

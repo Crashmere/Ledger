@@ -23,6 +23,7 @@
 // ============================================================
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { useProjectMonthFilter } from '../composables/useAccountRange';
 import { getAdapter } from '../db/client';
 import {
   importLegacyBackup,
@@ -50,6 +51,7 @@ import type { MergeReport } from '../services/sync/merge';
 import { planBatch, ensureLimit, type BatchPlan } from './sqlConsole';
 
 const router = useRouter();
+const { enabled: projectMonthFilter, setEnabled: setProjectMonthFilter } = useProjectMonthFilter();
 
 // ---------- 流程状态 ----------
 type Phase = 'idle' | 'previewed' | 'done';
@@ -800,6 +802,28 @@ function onSettingsKeydown(e: KeyboardEvent): void {
 <template>
   <div class="content">
     <div class="stack gap-4" style="max-width: 720px; margin: 0 auto">
+      <div class="card">
+        <div class="card-head"><h3>账户 · 显示偏好</h3></div>
+        <div class="card-pad">
+          <div class="row gap-4 account-preference">
+            <div class="account-preference-text">
+              <div id="project-month-filter-label" class="account-preference-label">专项账户按月份筛选</div>
+              <div id="project-month-filter-description" class="faint mt-2 account-preference-description">关闭时，专项账户展示全部交易，分类支出及流入/流出按全部时间统计；开启后跟随顶部月份。仅影响本机账户页。</div>
+            </div>
+            <button
+              type="button"
+              class="switch"
+              :class="{ on: projectMonthFilter }"
+              role="switch"
+              :aria-checked="projectMonthFilter"
+              aria-labelledby="project-month-filter-label"
+              aria-describedby="project-month-filter-description"
+              @click="setProjectMonthFilter(!projectMonthFilter)"
+            ><span class="knob" aria-hidden="true"></span></button>
+          </div>
+        </div>
+      </div>
+
       <!-- ============ 数据导入 ============ -->
       <div class="card">
         <div class="card-head">
@@ -1369,6 +1393,11 @@ function onSettingsKeydown(e: KeyboardEvent): void {
 </template>
 
 <style scoped>
+.account-preference { justify-content: space-between; }
+.account-preference-text { flex: 1; min-width: 0; }
+.account-preference-label { font-weight: 600; }
+.account-preference-description { font-size: var(--fs-sm); line-height: 1.6; }
+
 /* 选文件拖拽区 */
 .dropzone {
   display: flex;

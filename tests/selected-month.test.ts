@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { effectScope, nextTick, type EffectScope } from 'vue';
+import { effectScope, nextTick, ref, watch, type EffectScope } from 'vue';
+import type { AccountKind } from '../src/services';
 
 const query = vi.hoisted(() => vi.fn());
 vi.mock('../src/services', () => ({ txnService: { query } }));
@@ -12,6 +13,11 @@ beforeEach(async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date(2026, 8, 13, 12));
   vi.resetModules();
+  const stored = new Map<string, string>();
+  vi.stubGlobal('localStorage', {
+    getItem: vi.fn((key: string) => stored.get(key) ?? null),
+    setItem: vi.fn((key: string, value: string) => { stored.set(key, value); }),
+  });
   query.mockReset();
   query.mockResolvedValue([{ time: new Date(2024, 0, 1).getTime() }]);
   const { useSelectedMonth } = await import('../src/composables/useSelectedMonth');
@@ -21,6 +27,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   scopes.splice(0).forEach(scope => scope.stop());
+  vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 
@@ -122,6 +129,104 @@ describe('共享月份', () => {
     expect(month.atCurrentMonth.value).toBe(false);
     month.nextMonth();
     expect(month.monthLabel.value).toBe('2026年10月');
+  });
+});
+
+describe('账户时间范围', () => {
+  it('专项默认全部时间，切月份不改变查询边界', async () => {
+    const { useAccountRange, useProjectMonthFilter } = await import('../src/composables/useAccountRange');
+    const range = useAccountRange(ref<AccountKind>('project'));
+    expect(useProjectMonthFilter().enabled.value).toBe(false);
+    expect(range.filterByMonth.value).toBe(false);
+    expect(range.timeFrom.value).toBeUndefined();
+    expect(range.timeTo.value).toBeUndefined();
+    expect(range.periodLabel.value).toBe('全部');
+    const changed = vi.fn();
+    const scope = effectScope();
+    scopes.push(scope);
+    scope.run(() => watch([range.timeFrom, range.timeTo], changed));
+    month.prevMonth();
+    await nextTick();
+    expect(changed).not.toHaveBeenCalled();
+    expect(range.periodLabel.value).toBe('全部');
+  });
+
+  it('普通账户始终按共享月份过滤，不受专项开关影响', async () => {
+    const { useAccountRange, useProjectMonthFilter } = await import('../src/composables/useAccountRange');
+    const range = useAccountRange(ref<AccountKind>('normal'));
+    const preference = useProjectMonthFilter();
+    for (const enabled of [false, true, false]) {
+      preference.setEnabled(enabled);
+      expect(range.filterByMonth.value).toBe(true);
+      expect(range.periodLabel.value).toBe('本月');
+      expect(range.timeFrom.value).toBe(month.timeFrom.value);
+      expect(range.timeTo.value).toBe(month.timeTo.value);
+    }
+    month.prevMonth();
+    expect(range.periodLabel.value).toBe('2026年8月');
+    expect(range.timeFrom.value).toBe(new Date(2026, 7, 1).getTime());
+    expect(range.timeTo.value).toBe(new Date(2026, 8, 1).getTime() - 1);
+  });
+
+  it('专项开关共享状态并立即切换范围，不修改选中的月份', async () => {
+    const { useAccountRange, useProjectMonthFilter } = await import('../src/composables/useAccountRange');
+    const range = useAccountRange(ref<AccountKind>('project'));
+    const preference = useProjectMonthFilter();
+    const other = useProjectMonthFilter();
+    month.prevMonth();
+    preference.setEnabled(true);
+    expect(other.enabled.value).toBe(true);
+    expect(range.filterByMonth.value).toBe(true);
+    expect(range.timeFrom.value).toBe(month.timeFrom.value);
+    expect(range.timeTo.value).toBe(month.timeTo.value);
+    expect(range.periodLabel.value).toBe('2026年8月');
+    month.prevMonth();
+    expect(range.periodLabel.value).toBe('2026年7月');
+    other.setEnabled(false);
+    expect(preference.enabled.value).toBe(false);
+    expect(range.timeFrom.value).toBeUndefined();
+    expect(range.timeTo.value).toBeUndefined();
+    expect(range.periodLabel.value).toBe('全部');
+    expect(month.monthLabel.value).toBe('2026年7月');
+  });
+
+  it('切换账户或修改账户种类时重新计算范围', async () => {
+    const { useAccountRange } = await import('../src/composables/useAccountRange');
+    const kind = ref<AccountKind | undefined>(undefined);
+    const range = useAccountRange(kind);
+    expect(range.filterByMonth.value).toBe(true);
+    kind.value = 'project';
+    expect(range.timeFrom.value).toBeUndefined();
+    kind.value = 'normal';
+    expect(range.timeFrom.value).toBe(month.timeFrom.value);
+    expect(range.timeTo.value).toBe(month.timeTo.value);
+    kind.value = 'project';
+    expect(range.periodLabel.value).toBe('全部');
+  });
+
+  it('开关在本机持久化，刷新后恢复开启及关闭状态', async () => {
+    const first = await import('../src/composables/useAccountRange');
+    first.useProjectMonthFilter().setEnabled(true);
+    expect(localStorage.getItem('accounts:project-month-filter')).toBe('1');
+    vi.resetModules();
+    const second = await import('../src/composables/useAccountRange');
+    expect(second.useProjectMonthFilter().enabled.value).toBe(true);
+    second.useProjectMonthFilter().setEnabled(false);
+    expect(localStorage.getItem('accounts:project-month-filter')).toBe('0');
+    vi.resetModules();
+    const third = await import('../src/composables/useAccountRange');
+    expect(third.useProjectMonthFilter().enabled.value).toBe(false);
+  });
+
+  it('本地存储不可用时默认关闭，切换仍在会话内生效', async () => {
+    vi.mocked(localStorage.getItem).mockImplementation(() => { throw new Error('blocked'); });
+    vi.mocked(localStorage.setItem).mockImplementation(() => { throw new Error('blocked'); });
+    const { useAccountRange, useProjectMonthFilter } = await import('../src/composables/useAccountRange');
+    const range = useAccountRange(ref<AccountKind>('project'));
+    const preference = useProjectMonthFilter();
+    expect(preference.enabled.value).toBe(false);
+    expect(() => preference.setEnabled(true)).not.toThrow();
+    expect(range.timeFrom.value).toBe(month.timeFrom.value);
   });
 });
 
