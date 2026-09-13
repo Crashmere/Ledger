@@ -227,7 +227,7 @@ function buildGroups(type: 'income' | 'expense'): BreakdownRow[] {
 const pieGroups = computed<BreakdownRow[]>(() => buildGroups(pieDir.value));
 const pieTotal = computed<number>(() => pieGroups.value.reduce((s, r) => s + r.amount, 0));
 
-/** 分类名 → 图表色：按金额降序位次分配 --chart-1..7，保证饼图/图例/排行同色。 */
+// 饼图和明细共用按金额降序分配的颜色。
 const colorByName = computed<Map<string, string>>(() => {
   const m = new Map<string, string>();
   pieGroups.value.forEach((g, i) => m.set(g.name, `var(--chart-${(i % 7) + 1})`));
@@ -557,24 +557,24 @@ function clearAll(): void {
       </div>
     </div>
 
-    <div class="rep-two-col mt-4">
-      <div class="card category-share">
-        <div class="card-head">
-          <h3>{{ pieDir === 'expense' ? '支出' : '收入' }}分类占比</h3>
-          <div class="row gap-2">
-            <button class="mini-toggle" :class="{ on: pieDir === 'expense' }" @click="pieDir = 'expense'">支出</button>
-            <button class="mini-toggle" :class="{ on: pieDir === 'income' }" @click="pieDir = 'income'">收入</button>
-          </div>
+    <div class="card category-breakdown mt-4">
+      <div class="card-head">
+        <h3>{{ pieDir === 'expense' ? '支出' : '收入' }}分类</h3>
+        <div class="row gap-2">
+          <button type="button" class="mini-toggle" :class="{ on: pieDir === 'expense' }" :aria-pressed="pieDir === 'expense'" @click="pieDir = 'expense'">支出</button>
+          <button type="button" class="mini-toggle" :class="{ on: pieDir === 'income' }" :aria-pressed="pieDir === 'income'" @click="pieDir = 'income'">收入</button>
         </div>
-        <div class="card-pad">
-          <div v-if="pieGroups.length === 0" class="empty">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 3v9l6 3" />
-            </svg>
-            <div style="font-weight: 700; color: var(--fg-2)">当前范围暂无{{ pieDir === 'expense' ? '支出' : '收入' }}</div>
-          </div>
-          <div v-else class="pie-content">
+      </div>
+      <div class="card-pad">
+        <div v-if="pieGroups.length === 0" class="empty">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 3v9l6 3" />
+          </svg>
+          <div style="font-weight: 700; color: var(--fg-2)">当前范围暂无{{ pieDir === 'expense' ? '支出' : '收入' }}</div>
+        </div>
+        <div v-else class="category-content">
+          <div class="category-chart">
             <div class="donut" :style="donutStyle">
               <div class="donut-center">
                 <div>
@@ -583,40 +583,24 @@ function clearAll(): void {
                 </div>
               </div>
             </div>
-            <div class="legend">
-              <div v-for="row in pieGroups" :key="'lg-' + row.name" class="legend-item">
-                <span class="lg-dot" :style="{ background: colorByName.get(row.name) }"></span>
-                <span class="category-name" :title="row.name">{{ row.name }}</span>
-                <span class="lg-val num">{{ fmtMoney(row.amount) }} · {{ pct(row.amount) }}%</span>
-              </div>
+          </div>
+          <div class="category-detail">
+            <div class="category-detail-head">
+              <span class="muted" title="跨账户按分类名合并">分类明细</span>
+              <span class="faint">金额（高→低）</span>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card category-detail">
-        <div class="card-head">
-          <h3 title="跨账户按分类名合并">分类明细</h3>
-          <span class="faint rank-sort">金额（高→低）</span>
-        </div>
-        <div class="card-pad">
-          <div v-if="rankRows.length === 0" class="empty">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-              <path d="M4 20V10M10 20V4M16 20v-8M22 20H2" />
-            </svg>
-            <div style="font-weight: 700; color: var(--fg-2)">当前范围暂无{{ pieDir === 'expense' ? '支出' : '收入' }}分类</div>
-          </div>
-          <div v-else class="stack gap-4">
-            <div v-for="row in rankRows" :key="'rk-' + row.name">
-              <div class="rank-label">
-                <span class="rank-name">
-                  <span class="lg-dot" :style="{ background: colorByName.get(row.name) }"></span>
-                  <span class="category-name" :title="row.name">{{ row.name }}</span>
-                </span>
-                <span class="rank-amount num muted">{{ fmtMoney(row.amount) }} · <b class="tag-inline">{{ pct(row.amount) }}%</b></span>
-              </div>
-              <div class="bar-track">
-                <div class="bar-fill" :style="{ width: barWidth(row.amount), background: colorByName.get(row.name) }"></div>
+            <div class="stack gap-4">
+              <div v-for="row in rankRows" :key="row.name">
+                <div class="rank-label">
+                  <span class="rank-name">
+                    <span class="lg-dot" :style="{ background: colorByName.get(row.name) }"></span>
+                    <span class="category-name" :title="row.name">{{ row.name }}</span>
+                  </span>
+                  <span class="rank-amount num muted">{{ fmtMoney(row.amount) }} · <b class="tag-inline">{{ pct(row.amount) }}%</b></span>
+                </div>
+                <div class="bar-track">
+                  <div class="bar-fill" :style="{ width: barWidth(row.amount), background: colorByName.get(row.name) }"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -788,28 +772,24 @@ function clearAll(): void {
   z-index: 2;
   text-align: center;
 }
-.pie-content {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+.category-breakdown { min-width: 0; }
+.category-breakdown .card-head { flex-wrap: wrap; gap: 8px; }
+.category-content {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 532px);
   justify-content: center;
-  gap: 20px;
+  align-items: start;
+  gap: 32px;
 }
-.legend {
+.category-chart { display: flex; justify-content: center; padding-top: 4px; }
+.category-detail { min-width: 0; }
+.category-detail-head {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  flex: 1 1 220px;
-  min-width: 0;
-  max-width: 100%;
-}
-.legend-item {
-  display: flex;
+  justify-content: space-between;
   flex-wrap: wrap;
-  align-items: center;
   gap: 8px;
-  font-size: var(--fs-sm);
-  min-width: 0;
+  margin-bottom: 16px;
+  font-size: var(--fs-xs);
 }
 .lg-dot {
   width: 10px;
@@ -824,12 +804,6 @@ function clearAll(): void {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.legend-item .lg-val {
-  margin-left: auto;
-  font-weight: 700;
-  overflow-wrap: anywhere;
-}
-.rank-sort { font-size: var(--fs-xs); }
 .rank-label {
   display: flex;
   align-items: center;
@@ -859,24 +833,18 @@ function clearAll(): void {
   border-radius: var(--r-pill);
 }
 
-.rep-two-col {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(2, minmax(0, 532px));
-  justify-content: center;
-}
-.rep-two-col > .card { min-width: 0; }
-.rep-two-col .card-head { flex-wrap: wrap; gap: 8px; }
 .grid.g-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .stat { min-width: 0; overflow-wrap: anywhere; }
 
+@media (max-width: 960px) {
+  .category-content { grid-template-columns: minmax(0, 532px); gap: 24px; }
+}
+
 @media (min-width: 721px) and (max-width: 960px) {
-  .rep-two-col { grid-template-columns: minmax(0, 532px); }
   .grid.g-3 { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 720px) {
-  .rep-two-col { grid-template-columns: minmax(0, 1fr); }
 
   /* 汇总三卡：窄屏挤不下三列 → 单列铺满 */
   .grid.g-3 {
@@ -888,7 +856,6 @@ function clearAll(): void {
     gap: 10px;
   }
 
-  /* 饼图行：环 + 图例竖排，图例不溢出 */
   .donut {
     width: 128px;
     height: 128px;
