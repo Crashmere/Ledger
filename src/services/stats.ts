@@ -227,6 +227,8 @@ export function bucketOf(timeMs: number, granularity: 'day' | 'month'): string {
   return granularity === 'month' ? ym : `${ym}-${pad2(d.getDate())}`;
 }
 
+export const EXPENSE_HEATMAP_LEVEL_COUNT = 8;
+
 export interface ExpenseHeatmapDay {
   date: string;
   time: number;
@@ -271,8 +273,12 @@ export function buildExpenseHeatmap(
     // 按本地日历递增，避免夏令时切换导致重复或漏掉一天。
     cursor.setDate(cursor.getDate() + 1);
   }
+  // 以 1 元为对数尺度压缩极端大额，只改变着色，不改变整数分金额。
+  const logMax = Math.log1p(maxAmount / 100);
   for (const day of days) {
-    day.level = day.amount > 0 ? Math.ceil((day.amount / maxAmount) * 4) : 0;
+    day.level = day.amount > 0
+      ? Math.ceil((Math.log1p(day.amount / 100) / logMax) * EXPENSE_HEATMAP_LEVEL_COUNT)
+      : 0;
   }
 
   return { days, startWeekday, weekCount: Math.ceil((startWeekday + days.length) / 7), total, activeDays };

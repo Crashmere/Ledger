@@ -2,7 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import type { Txn } from '../services/contract';
 import { format } from '../services/money';
-import { buildExpenseHeatmap, type ExpenseHeatmapDay } from '../services/stats';
+import { buildExpenseHeatmap, EXPENSE_HEATMAP_LEVEL_COUNT, type ExpenseHeatmapDay } from '../services/stats';
 
 const props = defineProps<{
   txns: readonly Pick<Txn, 'type' | 'amount' | 'time'>[];
@@ -15,7 +15,13 @@ const grid = ref<HTMLElement | null>(null);
 const focusedIndex = ref(0);
 const activeDate = ref<string | null>(null);
 const activeDay = computed(() => heatmap.value.days.find((day) => day.date === activeDate.value));
-const levels = [0, 1, 2, 3, 4];
+const levels = Array.from({ length: EXPENSE_HEATMAP_LEVEL_COUNT + 1 }, (_, level) => level);
+const levelStyles = levels.map((level) => ({
+  background: level === 0
+    ? 'var(--surface-3)'
+    : `color-mix(in srgb, var(--expense) ${16 + 84 * (level - 1) / (EXPENSE_HEATMAP_LEVEL_COUNT - 1)}%, var(--surface))`,
+}));
+const scaleDescription = `支出按对数分为 ${EXPENSE_HEATMAP_LEVEL_COUNT} 档，小额更细分、大额压缩；灰色表示无支出，最深色为当前范围最高支出`;
 const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
 const monthLabels = computed(() => {
   const labels: { text: string; column: number }[] = [];
@@ -93,6 +99,7 @@ async function onDayKeydown(event: KeyboardEvent, index: number): Promise<void> 
                   class="heatmap-day"
                   :class="{ selected: activeDate === day.date }"
                   :data-level="day.level"
+                  :style="levelStyles[day.level]"
                   :data-date="day.date"
                   :aria-label="describeDay(day)"
                   :title="describeDay(day)"
@@ -111,9 +118,9 @@ async function onDayKeydown(event: KeyboardEvent, index: number): Promise<void> 
         </div>
         <div class="heatmap-footer">
           <span class="muted">{{ heatmap.activeDays }} 天有支出 · 合计 <b class="num">{{ format(heatmap.total, { symbol: '¥' }) }}</b></span>
-          <div class="heatmap-scale faint" aria-label="颜色按当前范围每日最高支出分为四档，灰色表示无支出">
-            <span>少</span>
-            <span v-for="level in levels" :key="level" class="heatmap-swatch" :data-level="level" aria-hidden="true"></span>
+          <div class="heatmap-scale faint" :aria-label="scaleDescription" :title="scaleDescription">
+            <span>对数 · 少</span>
+            <span v-for="level in levels" :key="level" class="heatmap-swatch" :data-level="level" :style="levelStyles[level]" aria-hidden="true"></span>
             <span>多</span>
           </div>
         </div>
@@ -163,10 +170,6 @@ async function onDayKeydown(event: KeyboardEvent, index: number): Promise<void> 
   border-radius: 3px;
   background: var(--surface-3);
 }
-[data-level="1"] { background: color-mix(in srgb, var(--expense) 25%, var(--surface)); }
-[data-level="2"] { background: color-mix(in srgb, var(--expense) 50%, var(--surface)); }
-[data-level="3"] { background: color-mix(in srgb, var(--expense) 75%, var(--surface)); }
-[data-level="4"] { background: var(--expense); }
 .heatmap-day.selected { box-shadow: inset 0 0 0 1px var(--fg-2); }
 .heatmap-detail { margin-top: 14px; font-size: var(--fs-xs); color: var(--fg-2); overflow-wrap: anywhere; }
 .heatmap-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; font-size: var(--fs-sm); }

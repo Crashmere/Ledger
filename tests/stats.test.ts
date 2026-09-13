@@ -18,7 +18,7 @@ import {
   StatsServiceImpl,
   TxnServiceImpl,
 } from '../src/services';
-import { bucketOf, buildExpenseHeatmap } from '../src/services/stats';
+import { bucketOf, buildExpenseHeatmap, EXPENSE_HEATMAP_LEVEL_COUNT } from '../src/services/stats';
 import type { Id } from '../src/services/contract';
 
 let adapter: BetterSqliteAdapter;
@@ -233,12 +233,39 @@ describe('buildExpenseHeatmap', () => {
     expect(result.days.map((day) => [day.amount, day.count])).toEqual([[1708, 2], [1, 1]]);
   });
 
-  it('每日支出按当前最高额等分四档，无支出保持零档', () => {
-    const result = buildExpenseHeatmap([1, 100, 101, 200, 201, 300, 301, 400].map((amount, i) => ({
+  it('对数八档细分日常小额，大额支出不再把它们都压进最低档', () => {
+    const amounts = [1, 100, 500, 1000, 2000, 5000, 10000, 50000, 100000, 1000000];
+    const result = buildExpenseHeatmap(amounts.map((amount, i) => ({
       type: 'expense', amount, time: localMs(2026, 8, i + 1),
-    })), localMs(2026, 8, 1), localMs(2026, 8, 10) - 1);
-    expect(result.days.map((day) => day.level)).toEqual([1, 1, 2, 2, 3, 3, 4, 4, 0]);
-    expect(result.days.every((day) => Number.isInteger(day.amount))).toBe(true);
+    })), localMs(2026, 8, 1), localMs(2026, 8, 12) - 1);
+    expect(result.days.map((day) => day.level)).toEqual([1, 1, 2, 3, 3, 4, 5, 6, 7, 8, 0]);
+    expect(result.days.slice(0, amounts.length).map((day) => day.amount)).toEqual(amounts);
+    expect(result.total).toBe(amounts.reduce((sum, amount) => sum + amount, 0));
+    expect(result.activeDays).toBe(amounts.length);
+  });
+
+  it('分级随金额单调递增、同额同色，空白日期不影响色阶', () => {
+    const amounts = [1, 2, 10, 100, 100, 200, 1000, 10000, 1000000];
+    const txns = amounts.map((amount, i) => ({
+      type: 'expense' as const, amount, time: localMs(2026, 8, i + 1),
+    }));
+    const result = buildExpenseHeatmap(txns, localMs(2026, 8, 1), localMs(2026, 8, 10) - 1);
+    const levels = result.days.map((day) => day.level);
+    expect(levels).toEqual([...levels].sort((a, b) => a - b));
+    expect(levels[3]).toBe(levels[4]);
+    expect(levels.at(-1)).toBe(EXPENSE_HEATMAP_LEVEL_COUNT);
+    expect(levels.every((level) => Number.isInteger(level) && level >= 1 && level <= EXPENSE_HEATMAP_LEVEL_COUNT)).toBe(true);
+    const extended = buildExpenseHeatmap(txns, localMs(2026, 8, 1), localMs(2026, 9, 1) - 1);
+    expect(extended.days.slice(0, amounts.length)).toEqual(result.days);
+  });
+
+  it('单笔一分钱和全部同额时仍有有效最高档，不产生 NaN', () => {
+    for (const amounts of [[1], [100, 100, 100]]) {
+      const result = buildExpenseHeatmap(amounts.map((amount, i) => ({
+        type: 'expense', amount, time: localMs(2026, 8, i + 1),
+      })), localMs(2026, 8, 1), localMs(2026, 8, amounts.length + 1) - 1);
+      expect(result.days.map((day) => day.level)).toEqual(amounts.map(() => EXPENSE_HEATMAP_LEVEL_COUNT));
+    }
   });
 
   it('覆盖闰年、跨年和跨多个年份的范围，不截断为一年', () => {
