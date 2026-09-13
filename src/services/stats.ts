@@ -20,6 +20,7 @@ import type {
   StatsService,
   Summary,
   TrendPoint,
+  Txn,
   TxnQuery,
 } from './contract';
 
@@ -224,4 +225,55 @@ export function bucketOf(timeMs: number, granularity: 'day' | 'month'): string {
   const d = new Date(timeMs);
   const ym = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
   return granularity === 'month' ? ym : `${ym}-${pad2(d.getDate())}`;
+}
+
+export interface ExpenseHeatmapDay {
+  date: string;
+  time: number;
+  amount: number;
+  count: number;
+  level: number;
+}
+
+export function buildExpenseHeatmap(
+  txns: readonly Pick<Txn, 'type' | 'amount' | 'time'>[],
+  timeFrom: number,
+  timeTo: number,
+) {
+  const days: ExpenseHeatmapDay[] = [];
+  if (!Number.isFinite(timeFrom) || !Number.isFinite(timeTo) || timeFrom > timeTo) {
+    return { days, startWeekday: 0, weekCount: 0, total: 0, activeDays: 0 };
+  }
+
+  const buckets = new Map<string, { amount: number; count: number }>();
+  for (const txn of txns) {
+    if (txn.type !== 'expense' || txn.time < timeFrom || txn.time > timeTo) continue;
+    const date = bucketOf(txn.time, 'day');
+    const bucket = buckets.get(date) ?? { amount: 0, count: 0 };
+    bucket.amount += txn.amount;
+    bucket.count++;
+    buckets.set(date, bucket);
+  }
+
+  const cursor = new Date(timeFrom);
+  cursor.setHours(0, 0, 0, 0);
+  const startWeekday = cursor.getDay();
+  let maxAmount = 0;
+  let total = 0;
+  let activeDays = 0;
+  while (cursor.getTime() <= timeTo) {
+    const date = bucketOf(cursor.getTime(), 'day');
+    const { amount, count } = buckets.get(date) ?? { amount: 0, count: 0 };
+    days.push({ date, time: cursor.getTime(), amount, count, level: 0 });
+    maxAmount = Math.max(maxAmount, amount);
+    total += amount;
+    if (count > 0) activeDays++;
+    // 按本地日历递增，避免夏令时切换导致重复或漏掉一天。
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  for (const day of days) {
+    day.level = day.amount > 0 ? Math.ceil((day.amount / maxAmount) * 4) : 0;
+  }
+
+  return { days, startWeekday, weekCount: Math.ceil((startWeekday + days.length) / 7), total, activeDays };
 }

@@ -18,7 +18,7 @@ import {
   StatsServiceImpl,
   TxnServiceImpl,
 } from '../src/services';
-import { bucketOf } from '../src/services/stats';
+import { bucketOf, buildExpenseHeatmap } from '../src/services/stats';
 import type { Id } from '../src/services/contract';
 
 let adapter: BetterSqliteAdapter;
@@ -200,5 +200,97 @@ describe('StatsService.trend', () => {
     const onlyA = await stats.trend({ granularity: 'month', accountIds: [a.id as Id] });
     expect(onlyA).toHaveLength(1);
     expect(onlyA[0].income).toBe(1000);
+  });
+});
+
+describe('buildExpenseHeatmap', () => {
+  it('补齐范围内每一天，按本地周日开始分列，不丢失空白日期', () => {
+    const result = buildExpenseHeatmap([], localMs(2026, 8, 1), localMs(2026, 9, 1) - 1);
+    expect(result.days).toHaveLength(31);
+    expect(result.startWeekday).toBe(6);
+    expect(result.weekCount).toBe(6);
+    expect(result.days[0].date).toBe('2026-08-01');
+    expect(result.days[30].date).toBe('2026-08-31');
+    expect(result.days.every((day) => day.amount === 0 && day.count === 0 && day.level === 0)).toBe(true);
+    expect(result.activeDays).toBe(0);
+    expect(result.total).toBe(0);
+  });
+
+  it('只累加闭区间内的支出整数分，收入和转账不影响金额与支出天数', () => {
+    const from = localMs(2026, 8, 1);
+    const to = localMs(2026, 8, 3) - 1;
+    const result = buildExpenseHeatmap([
+      { type: 'expense', amount: 928, time: from },
+      { type: 'expense', amount: 780, time: from + 1000 },
+      { type: 'expense', amount: 1, time: to },
+      { type: 'expense', amount: 9999, time: from - 1 },
+      { type: 'expense', amount: 9999, time: to + 1 },
+      { type: 'income', amount: 9999, time: from },
+      { type: 'transfer', amount: 9999, time: to },
+    ], from, to);
+    expect(result.total).toBe(1709);
+    expect(result.activeDays).toBe(2);
+    expect(result.days.map((day) => [day.amount, day.count])).toEqual([[1708, 2], [1, 1]]);
+  });
+
+  it('每日支出按当前最高额等分四档，无支出保持零档', () => {
+    const result = buildExpenseHeatmap([1, 100, 101, 200, 201, 300, 301, 400].map((amount, i) => ({
+      type: 'expense', amount, time: localMs(2026, 8, i + 1),
+    })), localMs(2026, 8, 1), localMs(2026, 8, 10) - 1);
+    expect(result.days.map((day) => day.level)).toEqual([1, 1, 2, 2, 3, 3, 4, 4, 0]);
+    expect(result.days.every((day) => Number.isInteger(day.amount))).toBe(true);
+  });
+
+  it('覆盖闰年、跨年和跨多个年份的范围，不截断为一年', () => {
+    const leap = buildExpenseHeatmap([], localMs(2024, 2, 1), localMs(2024, 3, 1) - 1);
+    expect(leap.days).toHaveLength(29);
+    expect(leap.days[28].date).toBe('2024-02-29');
+    const crossYear = buildExpenseHeatmap([], localMs(2025, 12, 31), localMs(2026, 1, 2) - 1);
+    expect(crossYear.days.map((day) => day.date)).toEqual(['2025-12-31', '2026-01-01']);
+    const twoYears = buildExpenseHeatmap([], localMs(2024, 1, 1), localMs(2026, 1, 1) - 1);
+    expect(twoYears.days).toHaveLength(731);
+  });
+
+  it('夏令时切换周按日历递增，每个日期只出现一次', () => {
+    for (const month of [3, 11]) {
+      const result = buildExpenseHeatmap([], localMs(2026, month, 1), localMs(2026, month, 16) - 1);
+      expect(result.days).toHaveLength(15);
+      expect(new Set(result.days.map((day) => day.date)).size).toBe(15);
+      expect(result.days.every((day) => new Date(day.time).getHours() === 0)).toBe(true);
+    }
+  });
+
+  it('日期倒置或无效时返回空图，单日范围保留一个方块', () => {
+    for (const [from, to] of [[2, 1], [NaN, 1], [0, Infinity]]) {
+      expect(buildExpenseHeatmap([], from, to)).toEqual({
+        days: [], startWeekday: 0, weekCount: 0, total: 0, activeDays: 0,
+      });
+    }
+    const day = localMs(2026, 8, 2);
+    const result = buildExpenseHeatmap([], day, day);
+    expect(result.days).toHaveLength(1);
+    expect(result.startWeekday).toBe(0);
+    expect(result.weekCount).toBe(1);
+  });
+
+  it('直接使用报告查询结果，账户、分类、金额与专项条件共同生效', async () => {
+    const normal = await accounts.create({ name: '日常', color: 1 });
+    const project = await accounts.create({ name: '专项', color: 2, kind: 'project' });
+    const food = await categories.create({ accountId: normal.id, name: '餐饮', color: 1 });
+    const time = localMs(2026, 8, 1);
+    await txns.createMany([
+      { type: 'expense', amount: 100, accountId: normal.id, categoryId: food.id, time },
+      { type: 'expense', amount: 500, accountId: normal.id, categoryId: food.id, time },
+      { type: 'expense', amount: 900, accountId: normal.id, time },
+      { type: 'expense', amount: 9999, accountId: project.id, time },
+      { type: 'income', amount: 700, accountId: normal.id, categoryId: food.id, time },
+    ]);
+    const query = { timeFrom: time, timeTo: localMs(2026, 9, 1) - 1 };
+    const filtered = await txns.query({ ...query, categoryIds: [food.id], amountMin: 200, excludeProjects: true });
+    expect(buildExpenseHeatmap(filtered, query.timeFrom, query.timeTo).total).toBe(500);
+    const normalTxns = await txns.query({ ...query, excludeProjects: true });
+    expect(buildExpenseHeatmap(normalTxns, query.timeFrom, query.timeTo).total).toBe(1500);
+    const projectTxns = await txns.query({ ...query, accountIds: [project.id] });
+    expect(buildExpenseHeatmap(projectTxns, query.timeFrom, query.timeTo).total).toBe(9999);
   });
 });

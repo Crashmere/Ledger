@@ -1,28 +1,5 @@
 <script setup lang="ts">
-// ============================================================
-// Reports.vue —— 报告页（Analysis，S9 · Priority 4）
-// ============================================================
-// 对照 设计稿/reports.html 桌面稿还原：
-//   时间范围选择器 + 逐步筛选(chips) → 汇总三卡 → 饼图(分类占比)+趋势图并排 → 分类明细排行。
-//
-// 数据源架构（重要设计决策，见 S9 任务书 §二/§四/§六.4/§六.7）：
-//   报告页要求「类型/账户/分类/标签/金额范围」任意 chip 都能实时收窄「全页统计」，
-//   且饼图/排行/汇总三处数字必须自洽（§六.4）。而 StatsService 的
-//   summary/breakdownByCategory/trend 签名只接受 accountIds/timeFrom/timeTo(+types)，
-//   无法表达 分类/标签/金额/关键词 维度。若对不同块用不同数据源，必然在加了这些 chip 时
-//   出现口径打架。因此本页以 TxnService.query(全部筛选) 为「唯一真相源」，
-//   在 TS 里按整数分派生 汇总/饼图/趋势/排行，保证四块永远自洽。
-//   —— StatsService 的两个方法已按契约实现并有单测（tests/stats.test.ts）；
-//      本页复刻其语义：按 category.name 跨账户合并、白名单排除 transfer、
-//      本地时区分桶（复用 stats.ts 导出的 bucketOf）。
-//
-// 红线：
-//   - 转账绝不进收支：汇总/饼图/趋势/排行只统计 income/expense（白名单）。
-//   - 金额全程整数分求和，仅展示层经 money.format（+千分位薄封装，不改 money.ts）。
-//   - 颜色一律引 token（--chart-*/--income/--expense），无硬编码色值。
-//   - 单人应用，界面无「记账人/成员/协作/TA」等社交化词汇。
-// 本阶段只做桌面宽屏；手机响应式留待后续。
-// ============================================================
+// 全部图表复用同一筛选结果，避免分类、标签和金额条件下的统计口径不一致。
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
   accountService,
@@ -38,7 +15,7 @@ import {
   type TxnQuery,
   type TxnWithTags,
 } from '../services';
-import { bucketOf } from '../services/stats';
+import ExpenseHeatmap from '../components/ExpenseHeatmap.vue';
 import { useReportRange, type RangeMode } from '../composables/useReportRange';
 
 const UNCATEGORIZED = '未分类';
@@ -47,12 +24,6 @@ const UNCATEGORIZED = '未分类';
 // 时间范围（§4.3：本月 / 近30天 / 本年 / 自定义；闭区间 timeTo=次月1号−1ms）
 // ============================================================
 const { rangeMode, customFrom, customTo, timeFrom, timeTo } = useReportRange();
-
-/** 趋势粒度随范围跨度：≤ ~45 天用日，更长用月（§4.3）。 */
-const granularity = computed<'day' | 'month'>(() => {
-  const days = (timeTo.value - timeFrom.value) / 86400000;
-  return days <= 45 ? 'day' : 'month';
-});
 
 const rangeLabel = computed<string>(() => {
   const f = new Date(timeFrom.value);
@@ -283,35 +254,6 @@ const donutStyle = computed<Record<string, string>>(() => {
 const rankRows = computed<BreakdownRow[]>(() => pieGroups.value);
 const rankMax = computed<number>(() => rankRows.value.reduce((m, r) => Math.max(m, r.amount), 0));
 
-/** 趋势点：按本地时区分桶（复用 stats.ts 的 bucketOf），bucket 升序。 */
-interface TrendBar {
-  bucket: string;
-  income: number;
-  expense: number;
-}
-const trendPoints = computed<TrendBar[]>(() => {
-  const map = new Map<string, TrendBar>();
-  for (const t of txns.value) {
-    if (t.type !== 'income' && t.type !== 'expense') continue;
-    const bucket = bucketOf(t.time, granularity.value);
-    let bar = map.get(bucket);
-    if (!bar) {
-      bar = { bucket, income: 0, expense: 0 };
-      map.set(bucket, bar);
-    }
-    if (t.type === 'income') bar.income += t.amount;
-    else bar.expense += t.amount;
-  }
-  return Array.from(map.keys())
-    .sort()
-    .map((b) => map.get(b)!);
-});
-const trendMax = computed<number>(() => {
-  let m = 0;
-  for (const p of trendPoints.value) m = Math.max(m, p.income, p.expense);
-  return m;
-});
-
 // ============================================================
 // 展示工具（金额一律经 money.format；此处仅在展示层加千分位）
 // ============================================================
@@ -332,19 +274,9 @@ function pct(amount: number): string {
   const t = pieTotal.value;
   return t > 0 ? ((amount / t) * 100).toFixed(1) : '0.0';
 }
-function barHeight(v: number): string {
-  const m = trendMax.value;
-  return m > 0 ? `${(v / m) * 100}%` : '0%';
-}
 function barWidth(amount: number): string {
   const m = rankMax.value;
   return m > 0 ? `${(amount / m) * 100}%` : '0%';
-}
-/** 趋势桶标签：月粒度「8月」；日粒度「8/8」。 */
-function bucketLabel(bucket: string): string {
-  const parts = bucket.split('-');
-  if (parts.length === 2) return `${Number(parts[1])}月`;
-  return `${Number(parts[1])}/${Number(parts[2])}`;
 }
 
 function typeLabel(t: TxnType): string {
@@ -625,10 +557,8 @@ function clearAll(): void {
       </div>
     </div>
 
-    <!-- 饼图 + 趋势 并排 -->
-    <div class="two-col rep-two-col mt-4">
-      <!-- 饼图卡 -->
-      <div class="card">
+    <div class="rep-two-col mt-4">
+      <div class="card category-share">
         <div class="card-head">
           <h3>{{ pieDir === 'expense' ? '支出' : '收入' }}分类占比</h3>
           <div class="row gap-2">
@@ -644,7 +574,7 @@ function clearAll(): void {
             </svg>
             <div style="font-weight: 700; color: var(--fg-2)">当前范围暂无{{ pieDir === 'expense' ? '支出' : '收入' }}</div>
           </div>
-          <div v-else class="row gap-4" style="align-items: center">
+          <div v-else class="pie-content">
             <div class="donut" :style="donutStyle">
               <div class="donut-center">
                 <div>
@@ -653,10 +583,10 @@ function clearAll(): void {
                 </div>
               </div>
             </div>
-            <div class="legend" style="flex: 1">
+            <div class="legend">
               <div v-for="row in pieGroups" :key="'lg-' + row.name" class="legend-item">
                 <span class="lg-dot" :style="{ background: colorByName.get(row.name) }"></span>
-                {{ row.name }}
+                <span class="category-name" :title="row.name">{{ row.name }}</span>
                 <span class="lg-val num">{{ fmtMoney(row.amount) }} · {{ pct(row.amount) }}%</span>
               </div>
             </div>
@@ -664,71 +594,37 @@ function clearAll(): void {
         </div>
       </div>
 
-      <!-- 趋势卡 -->
-      <div class="card">
+      <div class="card category-detail">
         <div class="card-head">
-          <h3>收支趋势（按{{ granularity === 'month' ? '月' : '日' }}）</h3>
-          <span class="row gap-3" style="font-size: 11px; font-weight: 600">
-            <span class="row gap-2"><span class="lg-dot" style="width: 9px; height: 9px; border-radius: 3px; background: var(--income)"></span>收入</span>
-            <span class="row gap-2"><span class="lg-dot" style="width: 9px; height: 9px; border-radius: 3px; background: var(--expense)"></span>支出</span>
-          </span>
+          <h3 title="跨账户按分类名合并">分类明细</h3>
+          <span class="faint rank-sort">金额（高→低）</span>
         </div>
         <div class="card-pad">
-          <div v-if="trendPoints.length === 0" class="empty">
+          <div v-if="rankRows.length === 0" class="empty">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-              <path d="M3 3v18h18" />
-              <path d="M18 8l-5 5-3-3-4 4" />
+              <path d="M4 20V10M10 20V4M16 20v-8M22 20H2" />
             </svg>
-            <div style="font-weight: 700; color: var(--fg-2)">当前范围暂无收支</div>
+            <div style="font-weight: 700; color: var(--fg-2)">当前范围暂无{{ pieDir === 'expense' ? '支出' : '收入' }}分类</div>
           </div>
-          <template v-else>
-            <div class="bars">
-              <div v-for="p in trendPoints" :key="p.bucket" class="bcol">
-                <div class="bseg" :style="{ height: barHeight(p.income), background: 'var(--income)' }"></div>
-                <div class="bseg" :style="{ height: barHeight(p.expense), background: 'var(--expense)' }"></div>
-                <div class="blabel">{{ bucketLabel(p.bucket) }}</div>
+          <div v-else class="stack gap-4">
+            <div v-for="row in rankRows" :key="'rk-' + row.name">
+              <div class="rank-label">
+                <span class="rank-name">
+                  <span class="lg-dot" :style="{ background: colorByName.get(row.name) }"></span>
+                  <span class="category-name" :title="row.name">{{ row.name }}</span>
+                </span>
+                <span class="rank-amount num muted">{{ fmtMoney(row.amount) }} · <b class="tag-inline">{{ pct(row.amount) }}%</b></span>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill" :style="{ width: barWidth(row.amount), background: colorByName.get(row.name) }"></div>
               </div>
             </div>
-            <div class="divider"></div>
-            <div class="row" style="justify-content: space-between; font-size: 12px">
-              <span class="muted">收入 <b class="num pos">{{ fmtMoney(summaryIncome, { sign: true }) }}</b></span>
-              <span class="muted">支出 <b class="num neg">−{{ fmtMoney(summaryExpense) }}</b></span>
-              <span class="muted">净额 <b class="num" :class="summaryNet >= 0 ? 'pos' : 'neg'">{{ fmtMoney(summaryNet, { sign: true }) }}</b></span>
-            </div>
-          </template>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- 分类明细排行 -->
-    <div class="card mt-4">
-      <div class="card-head">
-        <h3>分类明细（跨账户按分类名合并）</h3>
-        <span class="faint" style="font-size: 13px">金额（高→低）</span>
-      </div>
-      <div class="card-pad">
-        <div v-if="rankRows.length === 0" class="empty">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-            <path d="M4 20V10M10 20V4M16 20v-8M22 20H2" />
-          </svg>
-          <div style="font-weight: 700; color: var(--fg-2)">当前范围暂无{{ pieDir === 'expense' ? '支出' : '收入' }}分类</div>
-        </div>
-        <div v-else class="stack gap-4">
-          <div v-for="row in rankRows" :key="'rk-' + row.name">
-            <div class="row" style="justify-content: space-between; margin-bottom: 6px">
-              <span class="row gap-2" style="font-weight: 600">
-                <span class="lg-dot" style="width: 10px; height: 10px; border-radius: 3px" :style="{ background: colorByName.get(row.name) }"></span>
-                {{ row.name }}
-              </span>
-              <span class="num muted">{{ fmtMoney(row.amount) }} · <b class="tag-inline">{{ pct(row.amount) }}%</b></span>
-            </div>
-            <div class="bar-track">
-              <div class="bar-fill" :style="{ width: barWidth(row.amount), background: colorByName.get(row.name) }"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <ExpenseHeatmap class="mt-4" :txns="txns" :time-from="timeFrom" :time-to="timeTo" />
   </div>
 </template>
 
@@ -892,51 +788,65 @@ function clearAll(): void {
   z-index: 2;
   text-align: center;
 }
+.pie-content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
 .legend {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 100%;
 }
 .legend-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   font-size: var(--fs-sm);
+  min-width: 0;
 }
-.legend-item .lg-dot {
+.lg-dot {
   width: 10px;
   height: 10px;
   border-radius: 3px;
   flex-shrink: 0;
 }
+.category-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 .legend-item .lg-val {
   margin-left: auto;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
-
-.bars {
+.rank-sort { font-size: var(--fs-xs); }
+.rank-label {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-bottom: 6px;
+}
+.rank-name {
+  display: flex;
+  align-items: center;
   gap: 8px;
-  height: 140px;
+  min-width: 0;
+  flex: 1 1 80px;
+  font-weight: 600;
 }
-.bars .bcol {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 3px;
-  height: 100%;
-}
-.bars .bseg {
-  border-radius: 4px 4px 0 0;
-}
-.bars .blabel {
-  text-align: center;
-  font-size: var(--fs-xs);
-  color: var(--fg-3);
-  margin-top: 6px;
-}
+.rank-amount { margin-left: auto; font-size: var(--fs-sm); overflow-wrap: anywhere; }
 
 .bar-track {
   height: 8px;
@@ -949,20 +859,24 @@ function clearAll(): void {
   border-radius: var(--r-pill);
 }
 
-/* 饼图+趋势并排：桌面等分两列（等价于原内联 grid-template-columns:1fr 1fr）。 */
 .rep-two-col {
-  height: auto;
-  grid-template-columns: 1fr 1fr;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 532px));
+  justify-content: center;
+}
+.rep-two-col > .card { min-width: 0; }
+.rep-two-col .card-head { flex-wrap: wrap; gap: 8px; }
+.grid.g-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.stat { min-width: 0; overflow-wrap: anywhere; }
+
+@media (min-width: 721px) and (max-width: 960px) {
+  .rep-two-col { grid-template-columns: minmax(0, 532px); }
+  .grid.g-3 { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* ============================================================
-   手机端（≤720px）：单列堆叠、chips 横向可滚、统计块自适应。不改任何取数/统计逻辑。
-   ============================================================ */
 @media (max-width: 720px) {
-  /* 饼图 + 趋势 单列堆叠 */
-  .rep-two-col {
-    grid-template-columns: 1fr;
-  }
+  .rep-two-col { grid-template-columns: minmax(0, 1fr); }
 
   /* 汇总三卡：窄屏挤不下三列 → 单列铺满 */
   .grid.g-3 {
