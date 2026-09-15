@@ -1,0 +1,14 @@
+[Unit]
+Description=Ledger daily SQLite backup
+
+[Service]
+Type=oneshot
+User=ledger
+Group=ledger
+ExecStart=/opt/ledger/backup.sh
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/ledger /var/backups/ledger

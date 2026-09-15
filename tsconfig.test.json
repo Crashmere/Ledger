@@ -1,8 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "types": ["vite/client", "node", "better-sqlite3"],
-    "noEmit": true
-  },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "tests/**/*.ts"]
-}

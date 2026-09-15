@@ -1,0 +1,502 @@
+/* ============================================================
+   记账 · 设计系统（从 设计稿/assets/app.css 移植）
+   把设计 token（CSS 变量）与会复用的组件类搬进 src/，
+   使页面能直接用上 --primary、--surface、--fs 层级，以及
+   .pill、.segmented、.amount-display、.numpad、.btn 等既有样式，视觉与设计稿一致。
+   —— 仅移植记账 App 真正会用到的部分（外壳/通用组件/记一笔）；
+      展示画布用的 gallery/canvas 脚手架不搬。
+   ============================================================ */
+
+/* ---------- 1. Design Tokens ---------- */
+:root {
+  /* 品牌 / 语义色 */
+  --primary: #1a73e8;
+  --primary-strong: #1558c0;
+  --primary-fg: #ffffff;
+  --primary-soft: #e8f0fe;
+
+  /* 收支语义色（金额正负） */
+  --income: #1e8e3e;      /* 流入 / 收入：绿 */
+  --income-soft: #e6f4ea;
+  --expense: #d93025;     /* 流出 / 支出：红 */
+  --expense-soft: #fce8e6;
+  --transfer: #6c5ce7;    /* 转账：靛紫，区别于收支 */
+  --transfer-soft: #ecebfc;
+
+  /* 图表色（谷歌数据可视化） */
+  --chart-1: #4285f4;
+  --chart-2: #ea4335;
+  --chart-3: #fbbc05;
+  --chart-4: #34a853;
+  --chart-5: #ab47bc;
+  --chart-6: #00acc1;
+  --chart-7: #ff7043;
+
+  /* 中性表面 */
+  --bg: #f6f8fc;
+  --surface: #ffffff;
+  --surface-2: #f1f4f9;
+  --surface-3: #e8ecf3;
+  --sidebar-bg: #ffffff;
+
+  --fg: #1f2329;
+  --fg-2: #5f6368;
+  --fg-3: #9aa0a6;
+  --border: #e3e7ee;
+  --border-strong: #d3d8e0;
+  --ring: rgba(26, 115, 232, 0.35);
+
+  /* 账户标识色 */
+  --acc-life: #1e8e3e;     /* 生活费 */
+  --acc-consume: #f29900;  /* 消费 */
+  --acc-salary: #1a73e8;   /* 工资 */
+  --acc-side: #9334e6;     /* 副业 */
+
+  /* 字体 */
+  --font-sans: "DM Sans", "PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+
+  /* 字号层级 */
+  --fs-display: 44px;
+  --fs-h1: 26px;
+  --fs-h2: 20px;
+  --fs-h3: 16px;
+  --fs-body: 14px;
+  --fs-sm: 13px;
+  --fs-xs: 11px;
+
+  /* 间距体系（4px 基准） */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px;
+
+  /* 圆角 */
+  --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-xl: 20px; --r-pill: 999px;
+
+  /* 阴影（扁平克制） */
+  --sh-1: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.05);
+  --sh-2: 0 2px 6px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.06);
+  --sh-3: 0 10px 24px rgba(16, 24, 40, 0.12);
+  --sh-fab: 0 6px 16px rgba(26, 115, 232, 0.4);
+
+  --tab-h: 60px;
+
+  /* 主内容最大宽度：大屏下把内容列收进一个舒适阅读宽度并居中，
+     避免卡片被拉得过宽、交易行「信息 ↔ 金额」间距过大。窄屏无影响（视口 < 该值）。 */
+  --content-max: 1080px;
+}
+
+/* 深色模式（保留 token，暂不主动切换） */
+.dark, .theme-dark {
+  --primary: #8ab4f8;
+  --primary-strong: #aecbfa;
+  --primary-fg: #0b1220;
+  --primary-soft: #1e2a3d;
+
+  --income: #81c995;
+  --income-soft: #17301f;
+  --expense: #f28b82;
+  --expense-soft: #33211f;
+  --transfer: #b39ddb;
+  --transfer-soft: #241f36;
+
+  --bg: #17181c;
+  --surface: #202124;
+  --surface-2: #282a2e;
+  --surface-3: #303236;
+  --sidebar-bg: #202124;
+
+  --fg: #e8eaed;
+  --fg-2: #bdc1c6;
+  --fg-3: #9aa0a6;
+  --border: #34363b;
+  --border-strong: #43464c;
+  --ring: rgba(138, 180, 248, 0.4);
+}
+
+/* ---------- 2. Reset / Base ---------- */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #app { height: 100%; }
+html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  color: var(--fg);
+  background: var(--bg);
+  line-height: 1.45;
+}
+.num { font-family: var(--font-mono); font-feature-settings: "tnum"; letter-spacing: -0.01em; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; border: none; background: none; }
+button:disabled { cursor: not-allowed; }
+a { color: inherit; text-decoration: none; }
+svg { display: block; }
+.pos { color: var(--income); }
+.neg { color: var(--expense); }
+.tr  { color: var(--transfer); }
+.muted { color: var(--fg-2); }
+.faint { color: var(--fg-3); }
+
+/* 键盘焦点可见性：仅键盘（:focus-visible）时描边，鼠标点击不显，避免视觉噪声。
+   统一给所有可交互元素上「品牌色描边」，是纯键盘导航（Tab/方向键）的前提。 */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+/* 输入框已有自带聚焦样式（.input:focus），不再叠描边免重影。 */
+.input:focus-visible, .note-inline input:focus-visible, textarea:focus-visible { outline: none; }
+
+/* 桌面端快捷键小提示（如「← →」「⌥N」）：极轻量、不占大块空间。
+   手机端（≤720px）整体隐藏（见 段），仅电脑端展示。 */
+.kbd {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  font-family: var(--font-sans); font-size: 10px; font-weight: 700; line-height: 1;
+  color: var(--fg-3); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 4px;
+  vertical-align: middle;
+}
+.kbd-hint { display: inline-flex; align-items: center; gap: 3px; color: var(--fg-3); font-size: 11px; font-weight: 600; }
+
+/* ---------- 3. 桌面外壳：侧边栏 + 主区 ---------- */
+.app { display: flex; width: 100%; height: 100%; overflow: hidden; }
+.sidebar {
+  width: 220px; flex-shrink: 0; background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; padding: 18px 14px;
+}
+.brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 18px; }
+.brand-logo {
+  width: 34px; height: 34px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--primary), var(--transfer));
+  display: grid; place-items: center; color: #fff; flex-shrink: 0;
+}
+.brand-name { font-weight: 700; font-size: 15px; }
+
+.nav-add {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: var(--primary); color: var(--primary-fg);
+  font-weight: 700; padding: 12px; border-radius: var(--r-md);
+  box-shadow: var(--sh-2); margin-bottom: 16px; width: 100%;
+}
+.nav-add:hover { background: var(--primary-strong); }
+/* 侧栏「记一笔」按钮的 ⌥N 提示：右侧极淡小键帽，反白底以适配蓝底按钮。 */
+.nav-add-kbd { margin-left: 4px; display: inline-flex; }
+.nav-add-kbd .kbd {
+  color: var(--primary-fg); background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.nav-list { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.nav-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: var(--r-md);
+  color: var(--fg-2); font-weight: 500;
+}
+.nav-item svg { width: 20px; height: 20px; }
+.nav-item:hover { background: var(--surface-2); color: var(--fg); }
+/* 当前页高亮：RouterLink 实际输出的类是 router-link-active（旧 .active 保留兼容）。 */
+.nav-item.active,
+.nav-item.router-link-active { background: var(--primary-soft); color: var(--primary); font-weight: 700; }
+
+/* 开关（switch）：页面筛选共用。默认尺寸 44×26，另有 sm 变体。 */
+.switch {
+  width: 44px; height: 26px; border-radius: 999px;
+  background: var(--surface-3); position: relative; transition: 0.15s;
+  flex-shrink: 0; border: none; padding: 0; cursor: pointer;
+}
+.switch.on { background: var(--primary); }
+.switch .knob {
+  position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
+  border-radius: 50%; background: #fff; box-shadow: var(--sh-1); transition: 0.15s;
+}
+.switch.on .knob { left: 21px; }
+/* 小号变体：38×22，用于侧栏这类次要位置。 */
+.switch.switch-sm { width: 38px; height: 22px; }
+.switch.switch-sm .knob { width: 16px; height: 16px; }
+.switch.switch-sm.on .knob { left: 19px; }
+
+/* 主区 */
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.topbar {
+  height: 58px; flex-shrink: 0; border-bottom: 1px solid var(--border);
+  background: var(--surface); display: flex; align-items: center;
+  gap: 16px; padding: 0 22px; position: relative;
+}
+.page-title { font-size: var(--fs-h2); font-weight: 700; }
+.topbar-month { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+/* 页面级顶栏控制区：各页 <Teleport to="#topbar-slot"> 投放的控制条落于此，
+   右对齐、与页标题同高。空时不占位（无子元素时无视觉痕迹）。 */
+.topbar-slot { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+.content {
+  flex: 1; overflow: auto;
+  /* 大屏内容不铺满：用「可增长的左右内边距」把常规页内容收进一个舒适阅读列并居中，
+     使卡片不过宽、交易行「标题 ↔ 金额」间距不过大。相较给每个子元素设 max-width+auto，
+     此法子元素仍占满内容列、不受各自 margin 影响（如 .divider），position:fixed 浮层也天然不受限。
+     两段取 max：
+       ① clamp(24px, 5vw, 220px)：随窗口按比例伸缩的「保底侧留白」。即使内容区 < --content-max
+          （如带系统缩放的外接屏，网页有效宽仅 ~1173px、内容区仅 ~953px，居中项恒为负）时，
+          仍保证桌面右侧有明显留白，不会「顶到最右」。
+       ② (100%-max)/2：内容区足够宽时把内容居中收进 --content-max 阅读列，留白更大者胜出。
+     窄屏 (≤720px) 由下方 段的 padding 覆盖。 */
+  padding: 22px;
+  padding-inline: max(clamp(24px, 5vw, 220px), calc((100% - var(--content-max)) / 2));
+}
+.content::-webkit-scrollbar { width: 8px; }
+.content::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; }
+
+/* ---------- 4. 通用组件 ---------- */
+/* 卡片 */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); }
+.card-pad { padding: var(--sp-5); }
+
+/* 按钮 */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; border-radius: var(--r-md); padding: 10px 18px; transition: 0.12s; white-space: nowrap; }
+.btn svg { width: 18px; height: 18px; }
+.btn-primary { background: var(--primary); color: var(--primary-fg); box-shadow: var(--sh-1); }
+.btn-primary:hover { background: var(--primary-strong); }
+.btn-primary:disabled { background: var(--border-strong); box-shadow: none; }
+.btn-secondary { background: var(--primary-soft); color: var(--primary); }
+.btn-secondary:hover { filter: brightness(0.97); }
+.btn-ghost { background: transparent; color: var(--fg-2); border: 1px solid var(--border); }
+.btn-ghost:hover { background: var(--surface-2); }
+.btn-danger { background: var(--expense); color: #fff; }
+.btn-lg { padding: 14px 22px; font-size: 16px; }
+.btn-sm { padding: 7px 12px; font-size: var(--fs-sm); }
+.btn-block { width: 100%; }
+
+/* Pill / Chip */
+.pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--r-pill); padding: 7px 12px; font-size: var(--fs-sm);
+  font-weight: 600; color: var(--fg); white-space: nowrap;
+}
+.pill .p-key { color: var(--fg-3); font-weight: 500; }
+.pill .caret { color: var(--fg-3); }
+.pill:hover { border-color: var(--border-strong); }
+.pill.pill-active { background: var(--primary-soft); border-color: transparent; color: var(--primary); }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill); padding: 6px 12px; font-size: var(--fs-sm); font-weight: 600;
+}
+.chip .x { color: var(--fg-3); font-weight: 700; }
+.chip-add { border-style: dashed; color: var(--fg-2); }
+.chip-on { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+/* 输入 */
+.input { width: 100%; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-md); padding: 10px 12px; outline: none; transition: 0.12s; }
+.input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--ring); }
+.field-label { font-size: var(--fs-sm); font-weight: 600; color: var(--fg-2); margin-bottom: 6px; display: block; }
+
+/* 分段控件（类型切换） */
+.segmented { display: flex; background: var(--surface-2); border-radius: var(--r-md); padding: 4px; gap: 4px; }
+.segmented .seg { flex: 1; text-align: center; padding: 9px 0; border-radius: 7px; font-weight: 700; color: var(--fg-2); font-size: var(--fs-body); display: flex; align-items: center; justify-content: center; gap: 6px; }
+.segmented .seg svg { width: 16px; height: 16px; }
+.segmented .seg.on-expense { background: var(--surface); color: var(--expense); box-shadow: var(--sh-1); }
+.segmented .seg.on-income { background: var(--surface); color: var(--income); box-shadow: var(--sh-1); }
+.segmented .seg.on-transfer { background: var(--surface); color: var(--transfer); box-shadow: var(--sh-1); }
+
+/* 图标底片（账户/分类色标） */
+.ic-tile { width: 38px; height: 38px; border-radius: var(--r-md); display: grid; place-items: center; color: #fff; flex-shrink: 0; }
+.ic-tile.sm { width: 30px; height: 30px; border-radius: 8px; }
+.ic-tile.lg { width: 46px; height: 46px; border-radius: var(--r-lg); }
+.ic-tile svg { width: 20px; height: 20px; }
+.ic-tile.sm svg { width: 16px; height: 16px; }
+
+/* 数字键盘（记一笔核心） */
+.numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.numpad .key {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md); font-size: 22px; font-weight: 600;
+  display: grid; place-items: center; height: 100%;
+  font-family: var(--font-mono);
+}
+.numpad .key:hover { background: var(--surface-2); }
+.numpad .key:active { background: var(--surface-3); }
+.numpad .key.util { color: var(--fg-2); font-family: var(--font-sans); font-size: 16px; }
+.numpad .key.accent { color: var(--primary); }
+
+/* 金额显示 */
+.amount-display { text-align: center; padding: 8px 0; }
+.amount-display .cur { font-size: 24px; font-weight: 700; color: var(--fg-3); vertical-align: super; }
+.amount-display .val { font-size: 52px; font-weight: 800; letter-spacing: -0.02em; }
+.amount-display.expense .val { color: var(--expense); }
+.amount-display.income .val { color: var(--income); }
+.amount-display.transfer .val { color: var(--transfer); }
+.amount-display .expr { font-size: var(--fs-sm); color: var(--fg-3); height: 18px; }
+
+/* 空状态 */
+.empty { text-align: center; padding: 40px 20px; color: var(--fg-3); }
+.empty svg { width: 48px; height: 48px; margin: 0 auto 12px; opacity: 0.5; }
+
+/* 分隔线 */
+.divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+/* ---------- 5. 工具类 ---------- */
+.stack { display: flex; flex-direction: column; }
+.row { display: flex; align-items: center; }
+.gap-2 { gap: 8px; } .gap-3 { gap: 12px; } .gap-4 { gap: 16px; }
+.mt-2 { margin-top: 8px; } .mt-3 { margin-top: 12px; } .mt-4 { margin-top: 16px; } .mt-5 { margin-top: 20px; }
+.wrap { flex-wrap: wrap; }
+
+/* ---------- 6. 记一笔专用（从 add.html 内联 <style> 移植） ---------- */
+.pill-row { display: flex; gap: 8px; }
+.pill-row .pill { flex: 1; justify-content: center; }
+.note-inline { display: flex; align-items: center; gap: 10px; background: var(--surface-2); border-radius: var(--r-md); padding: 10px 12px; }
+.note-inline input { background: none; border: none; outline: none; width: 100%; color: var(--fg); font-size: var(--fs-body); }
+.note-inline svg { width: 18px; height: 18px; color: var(--fg-3); flex-shrink: 0; }
+/* 桌面记一笔卡片 */
+.add-card { width: 440px; margin: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-xl); box-shadow: var(--sh-2); overflow: hidden; }
+
+/* ---------- 7. 概览页组件类（从 add.html 之外的 app.css 补移植） ---------- */
+/* 卡片头 */
+.card-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.card-head h3 { font-size: var(--fs-h3); font-weight: 700; }
+
+/* 月份切换（概览顶部） */
+.month-switch { display: flex; align-items: center; gap: 6px; background: var(--surface-2); border-radius: var(--r-pill); padding: 4px; }
+.month-switch button { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: var(--fg-2); }
+.month-switch button:hover { background: var(--surface-3); }
+.month-switch button:disabled { color: var(--fg-3); background: none; cursor: not-allowed; }
+.month-switch .m-label { font-weight: 700; padding: 0 8px; min-width: 96px; text-align: center; }
+
+/* 顶栏图标按钮 */
+.icon-btn { width: 38px; height: 38px; border-radius: var(--r-md); display: grid; place-items: center; color: var(--fg-2); }
+.icon-btn:hover { background: var(--surface-2); }
+
+/* 徽标（转账/收入/支出标记） */
+.badge { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-xs); font-weight: 700; padding: 3px 9px; border-radius: var(--r-pill); }
+.badge-income { background: var(--income-soft); color: var(--income); }
+.badge-expense { background: var(--expense-soft); color: var(--expense); }
+.badge-transfer { background: var(--transfer-soft); color: var(--transfer); }
+
+/* 交易行 */
+.txn { display: flex; align-items: center; gap: 12px; padding: 11px 4px; border-bottom: 1px solid var(--border); }
+.txn:last-child { border-bottom: none; }
+.txn-main { flex: 1; min-width: 0; }
+.txn-title { font-weight: 600; font-size: var(--fs-body); }
+.txn-sub { font-size: var(--fs-xs); color: var(--fg-3); display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.txn-sub .sep { width: 3px; height: 3px; border-radius: 50%; background: var(--fg-3); }
+.txn-amt { font-weight: 700; font-size: 15px; }
+.day-head { display: flex; justify-content: space-between; align-items: baseline; padding: 14px 4px 6px; font-size: var(--fs-sm); }
+.day-head .d-date { font-weight: 700; }
+.day-head .d-sum { color: var(--fg-3); font-size: var(--fs-xs); }
+
+/* 统计小卡 */
+.stat { padding: 16px 18px; border-radius: var(--r-lg); border: 1px solid var(--border); background: var(--surface); }
+.stat .s-label { font-size: var(--fs-sm); color: var(--fg-2); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.stat .s-value { font-size: 28px; font-weight: 800; margin-top: 6px; }
+.stat .s-value.small { font-size: 22px; }
+.stat .s-trend { font-size: var(--fs-xs); color: var(--fg-3); margin-top: 4px; }
+
+/* 网格布局 */
+.grid { display: grid; gap: 16px; }
+.g-2 { grid-template-columns: repeat(2, 1fr); }
+.g-3 { grid-template-columns: repeat(3, 1fr); }
+.two-col { display: grid; grid-template-columns: 320px 1fr; gap: 16px; }
+
+/* section 标题 */
+.sec-title { font-size: var(--fs-h3); font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+
+/* helper */
+.mono-lg { font-family: var(--font-mono); font-weight: 700; }
+.tag-inline { font-size: var(--fs-xs); background: var(--surface-2); border-radius: var(--r-sm); padding: 2px 7px; color: var(--fg-2); font-weight: 600; }
+
+/* ============================================================
+   8. 手机 / 窄屏响应式外壳（响应式布局）
+   ------------------------------------------------------------
+   断点体系：≥1024px 桌面（与改动前逐像素一致）；≤720px 进入手机形态。
+   （各页原有的 900/960px 过渡收窄断点予以保留，作为平板宽度的两栏→单列过渡。）
+   手机形态：左侧栏收起、改由底部 4 tab 栏 + 中央悬浮记账 FAB 承载导航，
+   顶栏搜索框收成放大镜图标。全部靠 @media 覆盖，无 JS 判定。
+   —— 手机专属元素（.m-tabbar / .m-fab / .m-search-btn）在桌面下 display:none。
+   ============================================================ */
+
+/* 默认（桌面）：手机专属元素隐藏，确保桌面零回归。 */
+.m-tabbar, .m-fab, .m-search-btn, .m-back-btn { display: none; }
+
+/* 记一笔/编辑页（add-mode）：桌面顶栏也需返回入口——此流程无侧栏可依（专注录入），
+   否则桌面只能靠「保存修改/删除」离开。故让返回键在桌面 add-mode 下显现并自带尺寸样式；
+   手机端另有 @media(≤720) 段的同名规则接管，两者不冲突。 */
+.app-add-mode .m-back-btn {
+  display: grid; place-items: center;
+  width: 40px; height: 40px; border-radius: var(--r-md);
+  margin-left: -8px; border: none; background: none;
+  color: var(--fg); flex-shrink: 0; cursor: pointer;
+}
+.app-add-mode .m-back-btn:hover { background: var(--surface-2); }
+
+@media (max-width: 720px) {
+  /* 快捷键提示仅电脑端展示：手机无物理键盘，一律隐藏（不占位、不换行）。 */
+  .kbd, .kbd-hint { display: none !important; }
+
+  /* --- 布局翻转：外壳竖排，侧栏收起，主区铺满 --- */
+  .app { flex-direction: column; height: 100dvh; } /* dvh 跟随移动端地址栏，比 vh 稳（坑3） */
+  .sidebar { display: none; }
+  .main { flex: 1; min-height: 0; }
+
+  /* 记一笔/编辑（专注录入）路由：收起底栏 + FAB，让整屏交给记一笔外壳（头号红线：单屏无滚动）。 */
+  .app-add-mode .m-tabbar, .app-add-mode .m-fab { display: none; }
+  .app-add-mode .content { padding-bottom: 0; }
+
+  /* --- 顶栏：窄屏收紧间距，放大镜图标登场（跳 /search） --- */
+  .topbar { padding: 0 16px; gap: 10px; }
+  .m-search-btn {
+    display: grid; place-items: center;
+    width: 40px; height: 40px; border-radius: var(--r-md);
+    color: var(--fg-2); flex-shrink: 0;
+  }
+  .m-search-btn:hover { background: var(--surface-2); }
+  /* 当前在搜索页时高亮放大镜（复用 router-link-active） */
+  .m-search-btn.router-link-active { color: var(--primary); background: var(--primary-soft); }
+
+  /* 手机端记一笔/编辑页返回键（仅 v-if=isAddRoute 时渲染）：顶栏最左侧，负外边距贴齐 padding。 */
+  .m-back-btn {
+    display: grid; place-items: center;
+    width: 40px; height: 40px; border-radius: var(--r-md);
+    margin-left: -8px; border: none; background: none;
+    color: var(--fg); flex-shrink: 0; cursor: pointer;
+  }
+  .m-back-btn:hover { background: var(--surface-2); }
+
+  /* --- 主内容区：底部留白，避免被固定底栏 + FAB 遮挡（坑2） --- */
+  .content {
+    padding: 16px;
+    padding-bottom: calc(var(--tab-h) + 28px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* --- 底部 tab 栏（固定，5 格：概览·账户·[FAB 让位]·报告·搜索） --- */
+  .m-tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    height: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px));
+    padding: 0 8px env(safe-area-inset-bottom, 0px);
+    background: var(--surface); border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-around;
+    z-index: 30; /* 低于页面内弹层遮罩（40~60），不遮挡 modal 操作（坑7） */
+  }
+  .m-tab {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; flex: 1; min-width: 0; height: 100%;
+    color: var(--fg-3); font-size: var(--fs-xs); font-weight: 600;
+  }
+  .m-tab svg { width: 22px; height: 22px; }
+  .m-tab.router-link-active { color: var(--primary); }
+  .m-tab-spacer { flex: 1.2; }
+
+  /* --- 中央悬浮记账 FAB（浮在底栏中央上方，跳 /add） --- */
+  .m-fab {
+    position: fixed; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    width: 58px; height: 58px; border-radius: 50%;
+    background: var(--primary); color: var(--primary-fg);
+    display: grid; place-items: center;
+    box-shadow: var(--sh-fab); border: 4px solid var(--surface);
+    z-index: 31; /* 略高于底栏、仍低于页面弹层 */
+  }
+  .m-fab:hover { background: var(--primary-strong); }
+  .m-fab svg { width: 28px; height: 28px; }
+}
