@@ -6,10 +6,9 @@ After=network.target
 Type=simple
 User=ledger
 Group=ledger
-WorkingDirectory=/var/lib/ledger
-Environment=LEDGER_DB=/var/lib/ledger/ledger.sqlite
-Environment=LEDGER_ADDR=0.0.0.0:8080
-ExecStart=/opt/ledger/ledger serve
+WorkingDirectory=/opt/ledger
+EnvironmentFile=/opt/ledger/config/ledger.env
+ExecStart=/opt/ledger/bin/ledger serve
 Restart=on-failure
 RestartSec=3
 TimeoutStopSec=15
@@ -18,7 +17,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/var/lib/ledger
+ReadWritePaths=/opt/ledger/data
 
 [Install]
 WantedBy=multi-user.target

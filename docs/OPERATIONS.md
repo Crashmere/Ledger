@@ -1,84 +1,130 @@
 # 部署与维护
 
-目标服务器为 Ubuntu x86_64，SSH 别名 ali。程序以 ledger 系统用户运行，HTTP 默认监听 0.0.0.0:8080。无域名、TLS 或反向代理依赖；可使用公网 IP 或已解析的主机名访问。公网端口需在服务器防火墙及云安全组放行。
+应用以 ledger 用户运行，Go 只监听 127.0.0.1:18080。共享 Nginx 监听公网 HTTP 80，把 /ledger/ 转发给它；/ledger 自动跳到带尾斜线的地址。其他应用使用独立路径和本机端口，不需要额外公网端口。
 
-## 首次正式切换
+SQLite 不需要独立服务或全局实例：它是 Go 进程内的数据库引擎，账本是本地文件。每个应用使用各自的 SQLite 文件和备份目录，不跨应用共享数据库。
 
-1. 停止旧设备继续记账，完成旧系统最后一次同步，固定最终 Git commit。
-2. 按迁移工具说明下载快照、生成新库并检查报告。不要拿开发期间的试迁移库直接替代最终快照。
-3. 本地执行 make linux，将 bin/ledger-linux-amd64、deploy/ 及验证后的数据库放到服务器一个独立目录。
-4. 在该目录运行下面命令。安装脚本只用于首次安装，发现已有程序或数据库会退出。
+## 目录和配置
+
+```text
+/opt/ledger/
+  bin/ledger                Go 程序，内嵌 Vue 静态资源
+  bin/backup.sh             每日备份及轮换
+  config/ledger.env         本机监听、数据库和备份路径
+  config/nginx-location.conf
+  config/ledger.service
+  config/ledger-backup.service
+  config/ledger-backup.timer
+  data/ledger.sqlite        唯一正式账本，含同目录 WAL/SHM
+  backups/                  每日及手工备份
+  deployment/               root 私有的发布归档，不作为运行目录
+  docs/                     服务器上的维护说明
+```
+
+bin/config 由 root 管理，data/backups 为 ledger 所有、权限 0700。systemd 只在 /etc/systemd/system 建到 config 的链接。Nginx 的 /etc/nginx/app-locations/ledger.conf 链接到本项目 location 配置。
+
+共享入口 /etc/nginx/sites-available/apps 属于全局配置；它 include /etc/nginx/app-locations/*.conf。新增应用只需增加自己的 location 文件，不改 Ledger 的数据和服务。全局服务日志用 journalctl；Nginx 请求日志遵循其全局配置。
+
+同一 IP 下的不同路径仍属浏览器同源，路径分发用于部署组织，不是应用间的安全隔离。
+
+## 构建与首次切换
+
+1. 完成旧系统最后一次同步并停止写入，固定最终 Git commit。
+2. 按迁移工具说明生成新库并检查报告。真实快照、报告和数据库不进入源码仓库。
+3. 执行以下构建，将 Linux 程序、deploy/ 和已验证数据库上传到服务器独立暂存目录。
 
 ```sh
-chmod +x ledger-linux-amd64
+make test
+make linux BASE_PATH=/ledger/
+```
+
+BASE_PATH 是构建参数，同时影响资源、Vue 路由和 API；Go 内部路由不变。根路径本地构建使用默认值 /。如需用 Vite 调试子路径，可运行 VITE_BASE_PATH=/ledger/ npm --prefix web run dev。
+
+在服务器暂存目录中运行：
+
+```sh
 sudo bash deploy/install.sh ./ledger-linux-amd64 ./final.sqlite
 sudo systemctl status ledger
 sudo systemctl list-timers ledger-backup.timer
-curl --fail http://127.0.0.1:8080/healthz
+curl --fail http://127.0.0.1:18080/healthz
 ```
 
-安装会创建系统用户、程序目录 /opt/ledger、数据库目录 /var/lib/ledger、备份目录 /var/backups/ledger，并启用服务和每日备份。最后执行一次备份。程序和服务配置可以重新部署，数据目录应独立保留。
+安装脚本仅适用于首次安装；已有 /opt/ledger 或端口被占用时退出，不覆盖账本。它创建独立用户和目录，通过 restore 生成一致性副本，启用服务及每日备份并生成首备份。脚本不会安装 Nginx，也不修改共享入口。
 
-通过公网地址核对页面、余额、月份和几笔历史交易后开始使用。旧应用和原快照先留档，避免两个系统同时写入导致后续难以确定最新数据。
+新服务器的 Nginx 使用 Ubuntu 官方仓库包。安装后可参考 deploy/nginx-apps.conf 建立共享入口；必须先检查已有站点，保留原配置，不直接替换正在使用的站点。启用 Ledger 的路径：
+
+```sh
+sudo install -d -m 0755 /etc/nginx/app-locations
+sudo ln -s /opt/ledger/config/nginx-location.conf /etc/nginx/app-locations/ledger.conf
+sudo nginx -t
+sudo systemctl reload nginx
+curl --fail http://127.0.0.1/ledger/healthz
+```
+
+以上要求已启用共享 apps server。云安全组与主机防火墙只需放行 80，不开放 18080。公网使用 http://服务器IP/ledger/，核对账户、月份和历史交易后只在新版记账。
 
 ## 备份
 
-ledger-backup.timer 每天北京时间 03:00 运行，关机错过后补一次；允许最多五分钟随机延迟。backup.sh 先生成一致性快照并做 integrity_check/foreign_key_check，再保留最近 14 个 daily-*.sqlite。手工备份不参与轮换。
+ledger-backup.timer 每天北京时间 03:00 运行，错过后补一次，允许五分钟随机延迟。backup.sh 用 VACUUM INTO 生成包含已提交 WAL 的一致性快照，通过完整性/外键检查后保留最近 14 份 daily-*.sqlite；手工备份不参与轮换。
 
 ```sh
 sudo systemctl start ledger-backup.service
 sudo journalctl -u ledger-backup.service -n 30 --no-pager
-sudo -u ledger /opt/ledger/ledger backup --db /var/lib/ledger/ledger.sqlite --out /var/backups/ledger/manual-20260916.sqlite
+sudo -u ledger /opt/ledger/bin/ledger backup --db /opt/ledger/data/ledger.sqlite --out /opt/ledger/backups/manual-20260916.sqlite
 ```
 
-文件名必须唯一，已存在则退出。备份不会出现在网站目录或 HTTP 接口中。同盘备份用于误操作恢复；异机副本目的地需按实际存储安排配置，目前脚本仅管理本机备份。可通过 SSH 下载已经生成的备份文件，不要复制运行中主库。
+目标名必须唯一，不会覆盖已有文件。不要直接复制运行中的主库。同盘备份用于误操作恢复；异机备份仍需单独安排，可通过 SSH 下载已经完成的备份文件。网页不提供数据文件下载入口。
 
-## 恢复演练和正式恢复
+## 恢复
 
-先校验并恢复到独立路径；恢复命令拒绝覆盖文件：
+先校验并恢复到独立路径：
 
 ```sh
-sudo -u ledger /opt/ledger/ledger check --db /var/backups/ledger/manual-20260916.sqlite
-sudo -u ledger /opt/ledger/ledger restore --from /var/backups/ledger/manual-20260916.sqlite --db /var/lib/ledger/recovered.sqlite
+sudo -u ledger /opt/ledger/bin/ledger check --db /opt/ledger/backups/manual-20260916.sqlite
+sudo -u ledger /opt/ledger/bin/ledger restore --from /opt/ledger/backups/manual-20260916.sqlite --db /opt/ledger/data/recovered.sqlite
 ```
 
-正式替换会舍弃备份之后的当前账目，应先确定恢复时点。停止定时器和服务后，保存当前库，再替换已核对的新库。以下使用唯一归档目录，不删除当前数据库及 WAL/SHM：
+正式替换会丢弃恢复时点后的账目，执行前先确认恢复时点。停止 timer 和应用后保存现状，再替换；以下归档目录必须不存在：
 
 ```sh
 sudo systemctl stop ledger-backup.timer ledger-backup.service ledger.service
-sudo -u ledger /opt/ledger/ledger backup --db /var/lib/ledger/ledger.sqlite --out /var/backups/ledger/before-restore-20260916.sqlite
-sudo mkdir -m 0700 /var/lib/ledger/before-restore-20260916
-sudo mv /var/lib/ledger/ledger.sqlite /var/lib/ledger/before-restore-20260916/
-sudo bash -c 'for suffix in -wal -shm; do if [ -e "/var/lib/ledger/ledger.sqlite$suffix" ]; then mv "/var/lib/ledger/ledger.sqlite$suffix" /var/lib/ledger/before-restore-20260916/; fi; done'
-sudo mv /var/lib/ledger/recovered.sqlite /var/lib/ledger/ledger.sqlite
-sudo chown ledger:ledger /var/lib/ledger/ledger.sqlite
+sudo -u ledger /opt/ledger/bin/ledger backup --db /opt/ledger/data/ledger.sqlite --out /opt/ledger/backups/before-restore-20260916.sqlite
+sudo mkdir -m 0700 /opt/ledger/data/before-restore-20260916
+sudo mv /opt/ledger/data/ledger.sqlite /opt/ledger/data/before-restore-20260916/
+sudo bash -c 'for suffix in -wal -shm; do if [ -e "/opt/ledger/data/ledger.sqlite$suffix" ]; then mv "/opt/ledger/data/ledger.sqlite$suffix" /opt/ledger/data/before-restore-20260916/; fi; done'
+sudo mv /opt/ledger/data/recovered.sqlite /opt/ledger/data/ledger.sqlite
+sudo chown ledger:ledger /opt/ledger/data/ledger.sqlite
 sudo systemctl start ledger.service ledger-backup.timer
-curl --fail http://127.0.0.1:8080/healthz
+curl --fail http://127.0.0.1/ledger/healthz
 ```
 
-命令任一步失败先停下排查，不继续覆盖。若现库损坏而无法执行备份，保留原库及伴随文件作为故障归档后再处理。浏览器重新加载即可读取恢复后的账本。
+任一步失败先停下排查，不继续覆盖。若现库损坏无法备份，保留原库和伴随文件再处理。重启后浏览器重新加载，不从旧 GitHub 快照再次覆盖正式库。
 
 ## 更新程序
 
-先在本地执行 make test 和 make linux。服务器停服后先备份，保留旧程序，再安装新文件：
+日常更新优先推送 main，GitHub Actions 检查通过后自动备份、发布并验证；权限、记录与失败回退见 [CI/CD](CICD.md)。下面保留管理员手工更新流程，用于排障或首次配置。
+
+本地先 make test 和 make linux BASE_PATH=/ledger/。将新程序上传到独立暂存目录；停服后备份，保留旧程序，再安装：
 
 ```sh
 sudo systemctl stop ledger
-sudo -u ledger /opt/ledger/ledger backup --db /var/lib/ledger/ledger.sqlite --out /var/backups/ledger/before-upgrade-20260916.sqlite
-sudo cp /opt/ledger/ledger /opt/ledger/ledger.previous
-sudo install -m 0755 ./ledger-linux-amd64 /opt/ledger/ledger
+sudo -u ledger /opt/ledger/bin/ledger backup --db /opt/ledger/data/ledger.sqlite --out /opt/ledger/backups/before-upgrade-20260916.sqlite
+sudo cp -n /opt/ledger/bin/ledger /opt/ledger/bin/ledger.previous-20260916
+sudo install -m 0755 ./ledger-linux-amd64 /opt/ledger/bin/ledger
 sudo systemctl start ledger
-curl --fail http://127.0.0.1:8080/healthz
+curl --fail http://127.0.0.1/ledger/healthz
 ```
 
-当前 schema 为 1，服务不会自动打开未知版本。将来修改数据库结构时新增顺序迁移，并同时明确升级和回退步骤；不要通过改初始建表文件来更新已有库。纯程序更新失败可在停服后恢复旧程序；涉及 schema 变化需使用配套数据备份。
+日期示例每次应改成唯一名称。纯程序更新失败可在停服后恢复旧程序。修改 config 中的 unit 后运行 systemctl daemon-reload；修改 Nginx location 后先 nginx -t 再 reload，不影响其他应用。schema 变更需新增顺序迁移并配套升级、回退步骤，不通过重跑首次安装覆盖数据。
 
 ## 排查
 
 ```sh
 sudo journalctl -u ledger -n 100 --no-pager
-sudo systemctl status ledger ledger-backup.timer
-sudo -u ledger /opt/ledger/ledger check --db /var/lib/ledger/ledger.sqlite
+sudo systemctl status ledger ledger-backup.timer nginx
+sudo -u ledger /opt/ledger/bin/ledger check --db /opt/ledger/data/ledger.sqlite
+curl --fail http://127.0.0.1:18080/healthz
+curl --fail http://127.0.0.1/ledger/healthz
 ```
 
-启动时报库不存在时检查 LEDGER_DB 和目录权限；不要用 init 自动补一个空库。写请求网络失败时先查交易结果，再决定是否重试。服务没有离线队列或写入自动重试。
+本机端口正常而公网失败时检查 Nginx、80 端口和安全组。页面正常但资源/API 错误时核对构建 BASE_PATH 与 Nginx 前缀。缺库启动失败时检查路径和权限，不要 init 一个空账本。写请求结果不明先查账核对，不自动重试。

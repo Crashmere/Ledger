@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -72,5 +74,53 @@ func TestHTTPFormsErrorsAndPageFallback(t *testing.T) {
 	}
 	if response = send(http.MethodHead, "/search", "", ""); response.Body.Len() != 0 {
 		t.Fatal("HEAD returned a body")
+	}
+}
+
+// 模拟 Nginx 去掉 /ledger 前缀并保留浏览器 Host，验证同源读写和深链接。
+func TestPathPrefixThroughReverseProxy(t *testing.T) {
+	store, err := ledger.Open(filepath.Join(t.TempDir(), "ledger.sqlite"), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	backend := httptest.NewServer(New(store, fstest.MapFS{
+		"index.html":    {Data: []byte("<html>ledger</html>")},
+		"assets/app.js": {Data: []byte("app")},
+	}))
+	defer backend.Close()
+	target, err := url.Parse(backend.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	mux := http.NewServeMux()
+	mux.Handle("/ledger/", http.StripPrefix("/ledger", proxy))
+	send := func(method, path, body, origin string) *httptest.ResponseRecorder {
+		t.Helper()
+		request := httptest.NewRequest(method, "http://ledger.example"+path, strings.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Origin", origin)
+		response := httptest.NewRecorder()
+		mux.ServeHTTP(response, request)
+		return response
+	}
+	for _, path := range []string{"/ledger/", "/ledger/search", "/ledger/txn/example/edit", "/ledger/assets/app.js", "/ledger/healthz"} {
+		if response := send("GET", path, "", ""); response.Code != 200 {
+			t.Fatalf("%s: %d", path, response.Code)
+		}
+	}
+	input := `{"name":"合成代理测试","color":-1,"initialBalance":0,"includeInBalance":true,"kind":"normal","periodStart":null,"periodEnd":null,"archived":false}`
+	if response := send("POST", "/ledger/api/accounts", input, "http://ledger.example"); response.Code != 200 {
+		t.Fatalf("same-origin write: %d %s", response.Code, response.Body.String())
+	}
+	if response := send("POST", "/ledger/api/accounts", input, "http://other.example"); response.Code != 403 {
+		t.Fatal("cross-origin write accepted through proxy")
+	}
+	if response := send("GET", "/ledger/api/missing", "", ""); response.Code != 404 || !strings.Contains(response.Header().Get("Content-Type"), "application/json") {
+		t.Fatal("prefixed API fell back to HTML")
+	}
+	if response := send("GET", "/api/accounts", "", ""); response.Code != 404 {
+		t.Fatal("application escaped its URL prefix")
 	}
 }

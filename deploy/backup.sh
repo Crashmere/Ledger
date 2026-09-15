@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
-ledger_binary="${LEDGER_BINARY:-/opt/ledger/ledger}"
-ledger_database="${LEDGER_DB:-/var/lib/ledger/ledger.sqlite}"
-ledger_backups="${LEDGER_BACKUP_DIR:-/var/backups/ledger}"
+ledger_binary="${LEDGER_BINARY:-/opt/ledger/bin/ledger}"
+ledger_database="${LEDGER_DB:-/opt/ledger/data/ledger.sqlite}"
+ledger_backups="${LEDGER_BACKUP_DIR:-/opt/ledger/backups}"
 mkdir -p "$ledger_backups"
 backup_path="$ledger_backups/daily-$(date -u +%Y%m%dT%H%M%S)-$$.sqlite"
 "$ledger_binary" backup --db "$ledger_database" --out "$backup_path"

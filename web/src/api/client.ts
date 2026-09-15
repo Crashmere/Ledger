@@ -10,7 +10,7 @@ export async function request<T>(path: string, method = 'GET', body?: unknown): 
   if (!readOnly && connectionUnavailable.value) throw new AppError('NETWORK', '请先恢复连接并核对账目，再提交。');
   let response: Response;
   try {
-    response = await fetch('/api' + path, {
+    response = await fetch(import.meta.env.BASE_URL + 'api' + path, {
       method, cache: 'no-store',
       headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),

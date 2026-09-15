@@ -2,6 +2,8 @@
 
 同源 /api，JSON 使用 camelCase。金额为整数分，epoch 时间为毫秒，日期字符串为北京时间 YYYY-MM-DD。无登录。所有 API 响应 Cache-Control: no-store，成功返回 200。
 
+挂载到 /ledger/ 时，浏览器使用 /ledger/api；Nginx 去掉 /ledger 前缀再转发。下文资源地址均相对 API 根路径。
+
 错误示例：
 
 ```json
@@ -104,3 +106,5 @@ POST /transactions/batch/preview 只校验；POST /transactions/batch 再校验�
 1–500 行。金额 + 表示收入，负号或无符号表示支出，最多两位小数；批量标题必填。预览返回 {rows:[{line,transaction,errors}],income,expense,valid,count}，非法行 transaction=null，合计只含有效行。保存失败整批回滚；响应丢失需自行查询核对。
 
 GET /healthz 位于 /api 外，用于部署健康检查，返回 {status:"ok"}。
+
+子路径部署的公网健康检查地址为 /ledger/healthz；Go 本机端口仍使用 /healthz。
