@@ -60,6 +60,6 @@ projectScope 由页面显式选择，后端不识别页面名称。这样今后�
 
 API 不缓存；账目不会落 localStorage 或 Service Worker。检测断网后隐藏页面内容并禁写，手动连接检查成功后重新读取列表。回到页面会刷新，录入表单保留当前草稿。没有心跳、轮询或离线写队列。
 
-maintenance.go 提供一致性备份与只读检查。旧格式转换只在 tools/migrate-ivy 内，服务不包含旧快照接口。部署依靠 systemd 启停程序和定时备份。
+maintenance.go 提供一致性备份、恢复到新文件与只读检查。部署依靠 systemd 启停程序和定时备份；服务器数据库是唯一正式数据来源。
 
 SQLite 嵌入应用，不运行单独数据库服务。每个应用独立持有数据库文件；Ledger 的程序、配置、数据和备份集中在 /opt/ledger 的不同子目录。程序和配置由 root 管理，ledger 用户只可写自己的 data 和 backups。

@@ -32,7 +32,6 @@
   releases/                  每次自动发布的程序、上一版本及结果
   docs/                      当前项目文档和 SOURCE 来源标记
   deploy-user/.ssh/           专用 CI 公钥与强制命令配置
-  deployment/                初始安装材料留存，不参与运行
 ```
 
 | 对象 | 所有者与职责 |
@@ -84,7 +83,7 @@ check 成功时无输出、退出码 0；不能因为没输出就当作没执行
 
 ## 构建与首次安装
 
-只适用于新的空应用目录。现有 Ledger 更新看后面的发布流程，不能重跑首次安装或拿旧 GitHub 快照覆盖正式数据。
+只适用于新的空应用目录。现有 Ledger 更新看后面的发布流程，不能重跑首次安装或拿其他快照覆盖正式数据。
 
 在有相应工具链的开发机或 CI，按 go.mod 与 web/package-lock.json 准备依赖并构建：
 
@@ -98,7 +97,7 @@ make linux BASE_PATH=/ledger/
 
 将二进制、源码 `deploy/` 和初始数据上传到独立暂存目录，先校验来源/哈希。初始数据二选一：
 
-- 迁移：使用经应用工具验证的一致性备份；涉及旧格式转换才查 `tools/migrate-ivy`，日常重建不需要旧系统。
+- 保留已有数据：使用经 Ledger 维护工具验证的一致性备份。
 - 明确不要历史数据的新实例：在暂存目录用 `./ledger-linux-amd64 init --db ./initial.sqlite` 创建空库。不能在已有生产目录这样处理缺库。
 
 在服务器暂存目录运行（这里开始是写操作，需要部署授权）：
@@ -177,7 +176,7 @@ sudo systemctl start ledger-backup.service
 
 本仓库是项目文档源；服务器 `/opt/ledger/docs` 是供现场阅读的副本，不是另一个独立版本。每次变更主动更新相应 docs，覆盖旧说明。完整共享同步规程见 [maintenance.md](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/maintenance.md)，服务器同名文件在 `/opt/server-context/references/maintenance.md`。
 
-项目文档白名单为当前 Git 跟踪的 `AGENTS.md` 与 `docs/*.md`，先用 `git ls-files` 审阅，再从已提交版本 `git archive` 导出。禁止直接递归上传本地 docs：被忽略的验收文件可能包含真实账目。
+项目文档白名单为当前 Git 跟踪的 `AGENTS.md` 与 `docs/*.md`，先用 `git ls-files` 审阅，再从已提交版本 `git archive` 导出。禁止直接递归上传本地 docs，以免带入未跟踪的私人维护材料。同步验证完成后清理本次明确创建的暂存目录，不长期保留重复文档包。
 
 由管理员上传到独立暂存目录，安装项目入口到 `/opt/ledger/AGENTS.md`，文档到 `/opt/ledger/docs/`，均 root:root/0644；最终写 `docs/SOURCE`，记录 repository、完整 commit、subdirectory、synced_at。逐文件比较哈希，删除文档时明确同步移除已知受管理旧文件。不要改 `current-commit` 来假装文档和程序是同一版本。
 

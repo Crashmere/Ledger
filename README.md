@@ -41,7 +41,7 @@ make build
 
 测试使用临时合成账本，不读取个人财务数据。涵盖转账与删除、筛选、分页完整小计、历史时间、闰年、批量原子性、HTTP 表单、深链接，以及备份恢复。
 
-真实账本迁移和服务器验收记录仅本地保存，不纳入公开仓库。
+测试和维护报告若含真实账目信息，不纳入公开仓库。
 
 ## 手机使用
 
@@ -59,7 +59,7 @@ make build
 ./bin/ledger restore --from /path/to/new-backup.sqlite --db /path/to/new-restored.sqlite
 ```
 
-备份和恢复目标都必须不存在。备份使用 SQLite 一致性快照，不能用普通文件复制代替运行中数据库的备份。正式停服替换、systemd 每日备份和更新操作见 [部署维护](docs/OPERATIONS.md)。历史数据迁移见 [迁移工具说明](tools/migrate-ivy/README.md)。
+备份和恢复目标都必须不存在。备份使用 SQLite 一致性快照，不能用普通文件复制代替运行中数据库的备份。正式停服替换、systemd 每日备份和更新操作见 [部署维护](docs/OPERATIONS.md)。
 
 账本、备份、真实快照和对账报告都应保存在仓库之外；var/ 仅用于本地开发，已被忽略。
 
@@ -71,4 +71,4 @@ make build
 2. `web/src/pages/Search.vue` → `internal/ledger/filters.go` → `transactions.go` / `statistics.go`。
 3. `model.go` 和 `migrations/001_initial.sql` 描述类型和持久字段；`ledger_test.go` 是业务规则的具体例子。
 
-日常维护以本 README、docs 和代码为准；变更后主动更新对应文档及服务器副本。共享主机约定由 [server-operations](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/SKILL.md) 统一维护，本地迁移审阅和验收资料不随源码提交。
+日常维护以本 README、docs 和代码为准；变更后主动更新对应文档及服务器副本。共享主机约定由 [server-operations](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/SKILL.md) 统一维护。GitHub 用于源码与 CI/CD，不启用 GitHub Pages，也不用于账本同步。

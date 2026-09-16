@@ -19,11 +19,7 @@ coverage/
 playwright-report/
 test-results/
 
-# 本次迁移的本地资料包含私人账本统计和服务器检查信息。
-/MIGRATION_PLAN.md
-/PROJECT_REVIEW.md
-/docs/VERIFICATION.md
-.project-docs/
-ivy-wallet-snapshot.json
-ivy-wallet-backup.json
+# 私人维护快照和报告不纳入源码。
+*-snapshot.json
+*-backup.json
 *-report.json
