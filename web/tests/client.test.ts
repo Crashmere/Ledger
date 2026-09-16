@@ -31,4 +31,25 @@ describe('API 部署路径', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(connectionUnavailable.value).toBe(true);
   });
+  it('等待完整的保存响应才返回成功', async () => {
+    let confirm!: (response: Response) => void;
+    const fetcher = vi.fn(() => new Promise<Response>(resolve => { confirm = resolve; }));
+    vi.stubGlobal('fetch', fetcher);
+    const saved = vi.fn();
+    const pending = request('/transactions', 'POST', {}).then(saved);
+    await Promise.resolve();
+    expect(saved).not.toHaveBeenCalled();
+    confirm(new Response(JSON.stringify({ id: 'synthetic-transaction' })));
+    await pending;
+    expect(saved).toHaveBeenCalledWith({ id: 'synthetic-transaction' });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it('保存响应中断不能当作成功，也不重新提交', async () => {
+    const fetcher = vi.fn(async () => new Response('{', { status: 200 }));
+    vi.stubGlobal('fetch', fetcher);
+    await expect(request('/transactions', 'POST', {})).rejects.toMatchObject({
+      code: 'RESPONSE', message: '服务器响应异常，请先核对保存结果。',
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
 });

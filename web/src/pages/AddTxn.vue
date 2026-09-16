@@ -21,6 +21,10 @@ import { useMediaQuery } from '../composables/useMediaQuery';
 
 import { beijingDate, shiftDay } from '../services/dates';
 import LoadError from '../components/LoadError.vue';
+import PageSkeleton from '../components/PageSkeleton.vue';
+import SaveStatus from '../components/SaveStatus.vue';
+import { useSaveGuard } from '../composables/useSaveGuard';
+import { pushToast } from '../composables/useToast';
 import { readPreference, savePreference } from '../services/preferences';
 const LAST_ACCOUNT_KEY = 'last_account_id';
 
@@ -55,6 +59,10 @@ const justEvaluated = ref(false);
 
 const openPicker = ref<'account' | 'category' | 'toAccount' | 'date' | 'tag' | null>(null);
 const saving = ref(false);
+const saveError = ref('');
+const saveUncertain = ref(false);
+const showSaveError = ref(false);
+useSaveGuard(saving);
 const deleting = ref(false);
 const confirmingDelete = ref(false); // 删除二次确认弹层
 const initializing = ref(true);
@@ -126,7 +134,7 @@ watch(isMobile, (mobile) => {
 });
 
 const canSave = computed(() => {
-  if (initializing.value || initError.value || deleting.value) return false;
+  if (initializing.value || initError.value || deleting.value || saveUncertain.value) return false;
   const v = amountValue.value;
   if (v === null || v <= 0) return false;
   if (!accountId.value) return false;
@@ -282,7 +290,7 @@ function showFeedback(kind: 'success' | 'error', msg: string): void {
 }
 
 async function save(): Promise<void> {
-  if (saving.value || deleting.value || initializing.value || initError.value) return;
+  if (saving.value || deleting.value || initializing.value || initError.value || saveUncertain.value) return;
   const value = amountValue.value;
   if (value === null || value <= 0) {
     showFeedback('error', '请输入有效金额');
@@ -304,6 +312,11 @@ async function save(): Promise<void> {
   }
 
   saving.value = true;
+  openPicker.value = null;
+  blurAmount();
+  saveError.value = '';
+  showSaveError.value = false;
+  let saved = false;
   try {
     if (isEdit.value && editingId.value) {
       await txnService.update(editingId.value, {
@@ -318,7 +331,7 @@ async function save(): Promise<void> {
         tagIds: selectedTagIds.value.slice(),
       });
       showFeedback('success', '已保存 ✓');
-      goBack();
+      saved = true;
     } else {
       await txnService.create({
         type: type.value,
@@ -338,13 +351,16 @@ async function save(): Promise<void> {
       note.value = '';
       selectedTagIds.value = [];
       showFeedback('success', '已保存 ✓');
+      saved = true;
     }
   } catch (e) {
-    const msg = e instanceof AppError ? e.message : '保存失败，请重试';
-    showFeedback('error', msg);
+    saveUncertain.value = !(e instanceof AppError) || ['NETWORK', 'RESPONSE', 'INTERNAL', 'HTTP'].includes(e.code);
+    saveError.value = saveUncertain.value ? '未收到完整的保存确认，请先查看账目核对，避免重复添加。当前表单已保留。' : (e as AppError).message;
+    showSaveError.value = true;
   } finally {
     saving.value = false;
   }
+  if (saved && isEdit.value) { pushToast('success', '交易已保存'); goBack(); }
 }
 
 function askDelete(): void {
@@ -375,6 +391,7 @@ async function confirmDelete(): Promise<void> {
 }
 
 function goBack(): void {
+  if (saving.value) return;
   if (window.history.length > 1) {
     router.back();
   } else {
@@ -388,6 +405,7 @@ function copyCurrent(): void {
 }
 
 function onKeydown(e: KeyboardEvent): void {
+  if (saving.value || showSaveError.value) return;
   // 手机使用原生输入与焦点行为，不接管 Tab、数字键或 Enter 保存。
   if (isMobile.value) return;
   const el = e.target as HTMLElement | null;
@@ -536,6 +554,10 @@ onUnmounted(() => {
 
 <template>
   <div class="content add-content">
+    <PageSkeleton v-if="initializing" label="交易表单" form />
+    <SaveStatus v-if="saving || showSaveError" :saving="saving" :error="saveError" :uncertain="saveUncertain"
+      @dismiss="showSaveError = false" @review="router.push('/search')" />
+    <template v-if="!initializing">
     <LoadError :message="initError" @retry="initForm" />
     <Teleport v-if="!isEdit" to="#topbar-slot">
       <RouterLink
@@ -544,7 +566,7 @@ onUnmounted(() => {
         @keydown.enter.stop
       >批量记账</RouterLink>
     </Teleport>
-    <div class="add-card add-card-2col">
+    <div v-if="!initError" class="add-card add-card-2col" :aria-busy="saving">
 
       <div class="add-left">
         <div class="segmented">
@@ -799,6 +821,10 @@ onUnmounted(() => {
 
 
         <div class="add-right-foot">
+          <div v-if="saveError" class="feedback error" role="alert">
+            {{ saveError }}
+            <RouterLink v-if="saveUncertain" to="/search" class="btn btn-secondary mt-2">查看账目核对</RouterLink>
+          </div>
           <div v-if="feedback" class="feedback" :class="feedback.kind">{{ feedback.msg }}</div>
           <button class="btn btn-primary btn-lg btn-block mt-2" :disabled="!canSave || saving" @click="save">
             {{ saving ? '保存中…' : isEdit ? '保存修改' : '保存这一笔' }}
@@ -856,6 +882,7 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+    </template>
   </div>
 </template>
 

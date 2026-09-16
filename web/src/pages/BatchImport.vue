@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
+import PageSkeleton from '../components/PageSkeleton.vue';
+import SaveStatus from '../components/SaveStatus.vue';
 import {
   accountService, categoryService, txnService, format, AppError,
   type Account, type Category, type BatchRow, type BatchPreview,
@@ -29,6 +31,9 @@ const accounts = ref<Account[]>([]);
 const categories = ref(new Map<string, Category[]>());
 const loading = ref(true);
 const saving = ref(false);
+const saveError = ref('');
+const saveUncertain = ref(false);
+const showSaveError = ref(false);
 const error = ref('');
 const notice = ref('');
 const imported = ref<{ count: number; expense: number; income: number } | null>(null);
@@ -82,7 +87,7 @@ const checkedRows = computed(() => rows.value.map(row => {
 }));
 const invalidCount = computed(() => preview.value?.rows.filter(row => row.errors.length).length ?? 0);
 const totals = computed(() => ({ expense: preview.value?.expense ?? 0, income: preview.value?.income ?? 0, valid: preview.value?.valid ?? false }));
-const canImport = computed(() => !!preview.value?.valid && !previewing.value && !sourceChanged.value && !loading.value && !saving.value);
+const canImport = computed(() => !!preview.value?.valid && !previewing.value && !sourceChanged.value && !loading.value && !saving.value && !saveUncertain.value);
 async function refreshPreview(): Promise<void> {
   clearTimeout(previewTimer);
   const request = ++previewRequest;
@@ -193,6 +198,9 @@ async function askImport(): Promise<void> {
 async function commitImport(): Promise<void> {
   if (!canImport.value || !confirmDialog.value?.open) return;
   saving.value = true;
+  saveError.value = '';
+  showSaveError.value = false;
+  confirmDialog.value.close();
   error.value = '';
   try {
     const result = await txnService.batch(requestRows.value);
@@ -205,7 +213,10 @@ async function commitImport(): Promise<void> {
     notice.value = '';
     confirmDialog.value?.close();
   } catch (e) {
-    error.value = e instanceof AppError ? e.message : '保存失败，请先查看账目核对结果。';
+    saveUncertain.value = !(e instanceof AppError) || ['NETWORK', 'RESPONSE', 'INTERNAL', 'HTTP'].includes(e.code);
+    saveError.value = saveUncertain.value ? '未收到完整的保存确认，请先查看账目核对，避免重复添加。当前批次已保留。' : (e as AppError).message;
+    error.value = saveError.value;
+    showSaveError.value = true;
     confirmDialog.value?.close();
   } finally {
     saving.value = false;
@@ -239,6 +250,7 @@ async function retryLoad(): Promise<void> {
   finally { loading.value = false; }
 }
 onBeforeRouteLeave(allowLeave);
+onBeforeRouteUpdate(() => !saving.value);
 onMounted(async () => {
   window.addEventListener('beforeunload', beforeUnload);
   window.addEventListener('ledger-reload', retryLoad);
@@ -261,6 +273,8 @@ onBeforeUnmount(() => { previewRequest++; clearTimeout(previewTimer); window.rem
 
 <template>
   <div class="content batch-import">
+    <SaveStatus v-if="saving || showSaveError" :saving="saving" :error="saveError" :uncertain="saveUncertain"
+      @dismiss="showSaveError = false" @review="router.push('/search')" />
     <Teleport to="#topbar-slot">
       <button class="btn btn-ghost btn-sm" :disabled="saving" @click="goBack">返回</button>
     </Teleport>
@@ -275,10 +289,11 @@ onBeforeUnmount(() => { previewRequest++; clearTimeout(previewTimer); window.rem
       </div>
     </section>
     <LoadError :message="error" @retry="retryLoad" />
-    <p v-if="loading" class="muted" role="status">正在加载账户和分类…</p>
+    <PageSkeleton v-if="loading" label="账户和分类" form />
+    <p v-if="saveUncertain" class="import-error" role="alert">保存结果尚未确认，请先查看账目核对，当前批次不会重复提交。<RouterLink to="/search" class="btn">查看账目核对</RouterLink></p>
     <p v-if="!loading && !accounts.length" class="import-error">暂无账户，请先到账户页创建账户后再记账。</p>
 
-    <fieldset :disabled="saving || loading" class="import-editor">
+    <fieldset v-show="!loading" :disabled="saving || loading" class="import-editor">
       <details class="card source-card" :open="!parsed">
         <summary>1. 粘贴记账文本 <span class="muted">{{ parsed ? '展开查看原文 / 重新解析' : '每行一笔' }}</span></summary>
         <div class="source-body">

@@ -18,6 +18,7 @@ import {
 
 import Pagination from '../components/Pagination.vue';
 import LoadError from '../components/LoadError.vue';
+import PageSkeleton from '../components/PageSkeleton.vue';
 import { groupDays, type DayGroup } from '../services/groupDays';
 const router = useRouter();
 
@@ -37,6 +38,8 @@ const accounts = ref<Account[]>([]);
 const balanceById = ref<Map<Id, number>>(new Map());
 const categoryById = ref<Map<Id, Category>>(new Map());
 const loading = ref(false);
+const initializing = ref(true);
+const initializingRequest = ref(false);
 
 async function loadStatic(): Promise<void> {
   const [result, cats] = await Promise.all([accountService.list(), categoryService.list()]);
@@ -69,8 +72,12 @@ async function loadMonth(withStats = true): Promise<void> {
 }
 
 async function initialize(): Promise<void> {
+  if (initializingRequest.value) return;
+  initializingRequest.value = true;
+  error.value = '';
   try { await loadStatic(); await loadMonth(); }
-  catch(e) { error.value = (e as Error).message; }
+  catch (e) { error.value = (e as Error).message; }
+  finally { initializing.value = false; initializingRequest.value = false; }
 }
 onMounted(initialize);
 onUnmounted(() => { monthRequest++; });
@@ -147,6 +154,8 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
 
 <template>
   <div class="content">
+    <PageSkeleton v-if="initializing || loading || initializingRequest" label="概览" />
+    <template v-else>
     <LoadError :message="error" @retry="initialize" />
 
 
@@ -296,6 +305,7 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
         </RouterLink>
       </div>
     </div>
+    </template>
   </div>
 </template>
 

@@ -21,6 +21,7 @@ import {
 
 import Pagination from '../components/Pagination.vue';
 import LoadError from '../components/LoadError.vue';
+import PageSkeleton from '../components/PageSkeleton.vue';
 import { groupDays, type DayGroup } from '../services/groupDays';
 import { beijingDate } from '../services/dates';
 const { enabled: projectMonthEnabled, setEnabled: setProjectMonthEnabled } = useProjectMonthFilter();
@@ -33,8 +34,10 @@ function onHeaderChange(event: MediaQueryListEvent): void {
 
 const router = useRouter();
 const route = useRoute();
+let disposed = false;
 
 function syncQuery(): void {
+  if (disposed || route.name !== 'accounts') return;
   const q: Record<string, string> = {};
   if (selectedAccountId.value) q.account = selectedAccountId.value;
   if (categoryFilterId.value) q.cat = categoryFilterId.value;
@@ -121,6 +124,8 @@ const dayTotals = ref<Record<string, DayTotal>>({});
 const page = ref(1);
 const total = ref(0);
 const error = ref('');
+const initializing = ref(true);
+let refreshing = false;
 
 const modalTitle = computed(() => {
   const m = modal.value;
@@ -195,9 +200,23 @@ async function reloadDetail(withStats = true): Promise<void> {
 }
 watch([dateFrom, dateTo, categoryFilterId], () => { page.value = 1; syncQuery(); void reloadDetail(); });
 function changePage(value: number): void { page.value = value; void reloadDetail(false); }
-async function initialize(): Promise<void> {
-  try { await Promise.all([reloadAccounts(), reloadTags()]); syncQuery(); await reloadDetail(); }
+async function initialize(readRoute = false): Promise<void> {
+  if (refreshing) return;
+  refreshing = true;
+  error.value = '';
+  const qCat = readRoute ? route.query.cat : undefined;
+  try {
+    await Promise.all([reloadAccounts(), reloadTags()]);
+    if (disposed) return;
+    if (typeof qCat === 'string' && selectedAccountId.value) {
+      const cats = categoriesByAccount.value.get(selectedAccountId.value) ?? [];
+      if (cats.some((c) => c.id === qCat)) categoryFilterId.value = qCat;
+    }
+    await reloadDetail();
+    syncQuery();
+  }
   catch (e) { error.value = (e as Error).message; }
+  finally { initializing.value = false; refreshing = false; }
 }
 
 async function reloadTags(): Promise<void> {
@@ -223,20 +242,11 @@ onMounted(async () => {
   const qAccount = route.query.account;
   if (typeof qAccount === 'string' && qAccount) selectedAccountId.value = qAccount;
 
-  try { await reloadAccounts(); await reloadTags(); }
-  catch (e) { error.value = (e as Error).message; return; }
-
-  const qCat = route.query.cat;
-  if (typeof qCat === 'string' && qCat && selectedAccountId.value) {
-    const cats = categoriesByAccount.value.get(selectedAccountId.value) ?? [];
-    if (cats.some((c) => c.id === qCat)) categoryFilterId.value = qCat;
-  }
-
-  await reloadDetail();
-  syncQuery();
+  await initialize(true);
 });
 
 onUnmounted(() => {
+  disposed = true;
   detailRequest++;
   headerMedia.removeEventListener('change', onHeaderChange);
   window.removeEventListener('keydown', onGlobalKeydown);
@@ -682,6 +692,8 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
 
 <template>
   <div class="content acc-content">
+    <PageSkeleton v-if="initializing" label="账户" />
+    <template v-else>
     <LoadError :message="error" @retry="initialize" />
     <Teleport to="#topbar-slot" :disabled="compactHeader">
       <div class="subtabs">
@@ -888,7 +900,7 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
             <span v-else class="faint" style="font-size: 13px">仅显示「{{ selectedAccount.name }}」</span>
           </div>
           <div class="card-pad" style="padding-top: 4px">
-            <div v-if="detailLoading" class="empty" style="padding: 28px 12px">加载中…</div>
+            <PageSkeleton v-if="detailLoading" label="账户交易" compact />
             <div v-else-if="!error && groups.length === 0" class="empty" style="padding: 28px 12px">
               <div style="font-weight: 700; color: var(--fg-2)">{{ filterByMonth ? periodLabel : '' }}{{ filteredCategory ? '该分类下' : '该账户' }}暂无交易</div>
             </div>
@@ -1126,6 +1138,7 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
 
 
     <div v-if="feedback" class="toast" :class="feedback.kind">{{ feedback.msg }}</div>
+    </template>
   </div>
 </template>
 

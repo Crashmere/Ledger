@@ -19,6 +19,7 @@ import ExpenseHeatmap from '../components/ExpenseHeatmap.vue';
 import { useReportRange, type RangeMode } from '../composables/useReportRange';
 
 import LoadError from '../components/LoadError.vue';
+import PageSkeleton from '../components/PageSkeleton.vue';
 
 const { rangeMode, customFrom, customTo, dateFrom, dateTo } = useReportRange();
 
@@ -63,6 +64,8 @@ async function loadStatic(): Promise<void> {
   tags.value = tagList;
 }
 const loading = ref(false);
+const initializing = ref(true);
+const initializingRequest = ref(false);
 const error = ref('');
 const summary = ref(emptySummary());
 const categoryTotals = ref<CategoryTotal[]>([]);
@@ -116,8 +119,12 @@ async function load(): Promise<void> {
 }
 
 async function initialize(): Promise<void> {
+  if (initializingRequest.value) return;
+  initializingRequest.value = true;
+  error.value = '';
   try { await loadStatic(); await load(); }
   catch (e) { error.value = (e as Error).message; }
+  finally { initializing.value = false; initializingRequest.value = false; }
 }
 onMounted(async () => {
   window.addEventListener('keydown', onReportsKeydown);
@@ -292,6 +299,8 @@ usePageRefresh(() => { void initialize(); });
 
 <template>
   <div class="content reports">
+    <PageSkeleton v-if="initializing" label="报告" />
+    <template v-else>
     <LoadError :message="error" @retry="initialize" />
 
     <div class="rep-head">
@@ -448,6 +457,8 @@ usePageRefresh(() => { void initialize(); });
     </div>
 
 
+    <PageSkeleton v-if="loading || initializingRequest" label="报告统计" />
+    <template v-else>
     <div class="grid g-3 mt-4">
       <div class="stat">
         <div class="s-label">
@@ -535,6 +546,8 @@ usePageRefresh(() => { void initialize(); });
     </div>
 
     <ExpenseHeatmap class="mt-4" :data="daily" />
+    </template>
+    </template>
   </div>
 </template>
 

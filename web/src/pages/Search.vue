@@ -20,6 +20,7 @@ import {
 
 import Pagination from '../components/Pagination.vue';
 import LoadError from '../components/LoadError.vue';
+import PageSkeleton from '../components/PageSkeleton.vue';
 import HighlightText from '../components/HighlightText.vue';
 import { dayLabel } from '../services/dates';
 const router = useRouter();
@@ -101,6 +102,8 @@ async function loadStatic(): Promise<void> {
 const hitTxns = ref<TxnWithTags[]>([]);
 const summary = ref(emptySummary());
 const loading = ref(false);
+const initializing = ref(true);
+const initializingRequest = ref(false);
 const error = ref('');
 const page = ref(1);
 const excludedIds = ref<Set<Id>>(new Set());
@@ -167,8 +170,12 @@ watch([activeQuery, sortSel], () => {
 }, { deep: true });
 function changePage(value: number): void { page.value = value; void load(false); }
 async function initialize(): Promise<void> {
+  if (initializingRequest.value) return;
+  initializingRequest.value = true;
+  error.value = '';
   try { await loadStatic(); await load(); }
   catch (e) { error.value = (e as Error).message; }
+  finally { initializing.value = false; initializingRequest.value = false; }
 }
 
 const excludedCount = computed<number>(() => excludedIds.value.size);
@@ -474,6 +481,8 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
 
 <template>
   <div class="content">
+    <PageSkeleton v-if="initializing" label="搜索" />
+    <template v-else>
     <LoadError :message="error" @retry="initialize" />
 
     <div class="search-head">
@@ -675,6 +684,8 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
     <div class="divider"></div>
 
 
+    <PageSkeleton v-if="loading || initializingRequest" label="搜索结果" />
+    <template v-else>
     <div class="grid sum-strip">
       <div class="stat">
         <div class="s-label">
@@ -943,6 +954,8 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
         </div>
       </div>
     </div>
+    </template>
+    </template>
   </div>
 </template>
 
