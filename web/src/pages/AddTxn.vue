@@ -1130,6 +1130,8 @@ onUnmounted(() => {
   }
   .amount-input:focus { outline: none; border-bottom-color: currentColor; }
   .amount-input::placeholder { color: inherit; opacity: 1; }
+  /* 空金额聚焦时只显示光标；隐藏占位 0，不影响实际输入的 0 或小数。 */
+  .amount-input:focus::placeholder { opacity: 0; }
   .amount-help { font-size: var(--fs-sm); color: var(--fg-3); margin-top: 6px; }
   .amount-help.neg { color: var(--expense); }
   .add-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
