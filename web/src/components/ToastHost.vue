@@ -37,7 +37,7 @@ const iconPath: Record<ToastKind, string> = {
 <style scoped>
 .toast-host {
   position: fixed;
-  top: 16px;
+  top: calc(16px + var(--mobile-top-inset));
   left: 50%;
   transform: translateX(-50%);
   z-index: 200; /* 高于页面内 modal（~40-60）与手机底栏（~40） */
