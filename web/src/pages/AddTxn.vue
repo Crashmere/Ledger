@@ -16,6 +16,8 @@ import {
   type Id,
 } from '../api';
 import { evalExpr, isExpression } from '../services/expr';
+import { normalizeAmountInput, parseAmountInput } from '../services/amountInput';
+import { useMediaQuery } from '../composables/useMediaQuery';
 
 import { beijingDate, shiftDay } from '../services/dates';
 import LoadError from '../components/LoadError.vue';
@@ -24,6 +26,7 @@ const LAST_ACCOUNT_KEY = 'last_account_id';
 
 const route = useRoute();
 const router = useRouter();
+const isMobile = useMediaQuery('(max-width: 720px)');
 
 const editingId = computed<Id | null>(() => {
   const p = route.params.id;
@@ -47,7 +50,7 @@ const dateStr = ref<string>(todayStr()); // 智能默认：今天
 const selectedTagIds = ref<Id[]>([]);
 const title = ref(''); // 标题：主要信息（如"晚饭"），选填
 const note = ref(''); // 备注：详细信息（如"和同事在楼下吃"），选填
-const raw = ref(''); // 用户在数字键盘敲入的原始算式串
+const raw = ref(''); // 手机直接输入金额；桌面允许计算器算式
 const justEvaluated = ref(false);
 
 const openPicker = ref<'account' | 'category' | 'toAccount' | 'date' | 'tag' | null>(null);
@@ -61,6 +64,7 @@ const feedback = ref<{ kind: 'success' | 'error'; msg: string } | null>(null);
 let feedbackTimer: ReturnType<typeof setTimeout> | null = null;
 
 const amountBoxEl = ref<HTMLElement | null>(null);
+const amountInputEl = ref<HTMLInputElement | null>(null);
 const titleInputEl = ref<HTMLInputElement | null>(null);
 const noteInputEl = ref<HTMLInputElement | null>(null);
 
@@ -97,7 +101,28 @@ const exprLine = computed(() => {
     .trim();
 });
 
-const amountValue = computed(() => evalExprSafe(raw.value));
+const amountValue = computed(() => isMobile.value ? parseAmountInput(raw.value) : evalExprSafe(raw.value));
+const amountInputError = computed(() => raw.value !== '' && parseAmountInput(raw.value) === null);
+
+function onAmountInput(event: Event): void {
+  const input = event.target as HTMLInputElement;
+  raw.value = normalizeAmountInput(input.value);
+  input.value = raw.value;
+  justEvaluated.value = false;
+}
+
+function blurAmount(): void { amountInputEl.value?.blur(); }
+
+// iOS 点击非输入区域未必主动失焦；不拦截默认点击，仍可直接打开账户等选择器。
+function dismissAmountKeyboard(event: MouseEvent): void {
+  if (event.target !== amountInputEl.value) blurAmount();
+}
+
+watch(isMobile, (mobile) => {
+  if (!mobile || !isExpression(raw.value)) return;
+  const value = evalExprSafe(raw.value);
+  if (value !== null) raw.value = formatNum(value);
+});
 
 const canSave = computed(() => {
   if (initializing.value || initError.value || deleting.value) return false;
@@ -361,6 +386,8 @@ function copyCurrent(): void {
 }
 
 function onKeydown(e: KeyboardEvent): void {
+  // 手机使用原生输入与焦点行为，不接管 Tab、数字键或 Enter 保存。
+  if (isMobile.value) return;
   const el = e.target as HTMLElement | null;
 
   if (e.key === 'Tab') {
@@ -486,9 +513,10 @@ async function initForm(): Promise<void> {
 }
 function retryInitialization(): void { if (initError.value) void initForm(); }
 
-onMounted(async () => {
-  await initForm();
+onMounted(() => {
+  void initForm();
   window.addEventListener('keydown', onKeydown);
+  document.addEventListener('click', dismissAmountKeyboard);
   window.addEventListener('ledger-reload', retryInitialization);
 });
 
@@ -498,6 +526,7 @@ watch([editingId, copyingId], () => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown);
+  document.removeEventListener('click', dismissAmountKeyboard);
   window.removeEventListener('ledger-reload', retryInitialization);
   if (feedbackTimer) clearTimeout(feedbackTimer);
 });
@@ -538,13 +567,40 @@ onUnmounted(() => {
         </div>
 
 
-        <div ref="amountBoxEl" class="amount-display amount-lg" :class="type" tabindex="0" role="group" aria-label="金额">
+        <div v-if="isMobile" class="amount-display amount-mobile" :class="type">
+          <label class="amount-entry">
+            <span class="cur" aria-hidden="true">¥</span>
+            <input
+              ref="amountInputEl"
+              class="val num amount-input"
+              type="text"
+              inputmode="decimal"
+              enterkeyhint="done"
+              autocomplete="off"
+              :spellcheck="false"
+              aria-label="金额（元）"
+              aria-describedby="amount-help"
+              :aria-invalid="amountInputError"
+              placeholder="0"
+              :value="raw"
+              :style="{ width: Math.max(1, raw.length) + 'ch' }"
+              @input="onAmountInput"
+              @focus="openPicker = null"
+              @keydown.enter.prevent.stop="blurAmount"
+              @keydown.esc.prevent.stop="blurAmount"
+            />
+          </label>
+          <div id="amount-help" class="amount-help" :class="{ neg: amountInputError }">
+            {{ amountInputError ? '请输入数字，最多两位小数' : '点击金额输入' }}
+          </div>
+        </div>
+        <div v-else ref="amountBoxEl" class="amount-display amount-lg" :class="type" tabindex="0" role="group" aria-label="金额">
           <span class="cur">¥</span><span class="val num">{{ displayValue }}</span>
           <div class="expr num">{{ exprLine }}</div>
         </div>
 
 
-        <div class="numpad numpad-5">
+        <div v-if="!isMobile" class="numpad numpad-5">
           <button class="key util" @click="clearAll()" aria-label="清空">C</button>
           <button class="key" @click="press('7')">7</button>
           <button class="key" @click="press('8')">8</button>
@@ -575,8 +631,8 @@ onUnmounted(() => {
       <div class="add-right">
 
         <div class="field add-f-title">
-          <label class="field-label">标题</label>
-          <input ref="titleInputEl" v-model="title" class="input" placeholder="标题（选填，如：晚饭）" />
+          <label class="field-label" for="txn-title">标题</label>
+          <input id="txn-title" ref="titleInputEl" v-model="title" class="input" placeholder="标题（选填，如：晚饭）" />
         </div>
 
 
@@ -719,13 +775,13 @@ onUnmounted(() => {
 
 
         <div class="field">
-          <label class="field-label">备注</label>
+          <label class="field-label" for="txn-note">备注</label>
           <div class="note-inline">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4v16h16v-7" />
               <path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z" />
             </svg>
-            <input ref="noteInputEl" v-model="note" placeholder="备注（选填，详细信息）" />
+            <input id="txn-note" ref="noteInputEl" v-model="note" placeholder="备注（选填，详细信息）" />
           </div>
         </div>
 
@@ -828,157 +884,6 @@ onUnmounted(() => {
   display: contents;
 }
 
-/* ============================================================
-   手机端（≤720px）——头号红线：记一笔单屏无滚动。
-   思路（对照 add.html 手机稿）：把两栏卡片压成"一整列 flex"，
-   顺序：类型分段 → 金额 → 账户·分类(一行两 pill) → 日期·标签(一行两 pill)
-        → 备注 → 数字键盘(flex:1 常驻吃满剩余) → 保存(贴底)。
-   关键：外层容器用 100dvh 派生高度（.app 已置 100dvh），键盘 flex:1、其余 flex-shrink:0，
-        不用固定 px 硬凑（坑3）。
-   ============================================================ */
-@media (max-width: 720px) {
-  /* 内容区不滚动、铺满、无内边距（外壳 .app 已收起底栏，把整屏交给记一笔） */
-  .add-content {
-    padding: 0;
-    overflow: hidden;
-    align-items: stretch;
-    min-height: 0;
-  }
-
-  /* 卡片 = 纵向 flex，占满可用高度；去掉桌面卡片的圆角/居中/上限 */
-  .add-card-2col {
-    display: flex;
-    flex-direction: column;
-    grid-template-columns: none;
-    width: 100%;
-    max-width: none;
-    height: 100%;
-    min-height: 0;
-    margin: 0;
-    gap: 10px;
-    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
-  }
-
-  /* 左右栏透明化：其子元素成为卡片的直接 flex 项，便于统一排序 */
-  .add-left,
-  .add-right {
-    display: contents;
-  }
-
-  /* 统一排序（display:contents 后，两栏的孙元素在同一 flex 流里）。
-     两个 add-pair 同为 order:4，按源码先后（账户·分类 在前、日期·标签 在后）自然排列，
-     故不用 nth-of-type（首个 div 是标题，会错位）。 */
-  .add-left .segmented { order: 1; }
-  .add-left .amount-display { order: 2; }
-  .add-right .add-f-title { order: 3; }
-  .add-right .add-pair { order: 4; }              /* 账户·分类 / 日期·标签 两行 */
-  .add-right .field:not(.add-f-title) { order: 6; } /* 备注（直接项）；pair 内字段同序无副作用 */
-  .add-left .numpad-5 { order: 7; }
-  .add-right .add-right-foot { order: 8; }
-
-  /* 固定高度块：不参与伸缩 */
-  .add-left .segmented,
-  .add-left .amount-display,
-  .add-right .field,
-  .add-right .add-pair,
-  .add-right .add-right-foot {
-    flex-shrink: 0;
-  }
-
-  /* 金额：手机稿字号 46px，作视觉焦点；压缩上下留白 */
-  .amount-lg {
-    padding: 2px 0;
-  }
-  .amount-lg .val {
-    font-size: 46px;
-  }
-
-  /* 标题/备注字段：紧凑（label 收小，间距收窄） */
-  .add-right .field {
-    gap: 4px;
-  }
-
-  /* pill 对：一行两 pill，各占一半（红线④：账户·分类 / 日期·标签 各一行两个） */
-  .add-pair {
-    display: flex;
-    gap: 8px;
-  }
-  .add-pair .field {
-    flex: 1;
-    min-width: 0;
-  }
-
-  /* 日期三件套在手机端每个 .field 仅占半宽：加减按钮收窄、行内间距收紧，
-     确保「‹ pill ›」整行不换行、不撑破外层 flex:1（守单屏无滚动红线）。 */
-  .date-row {
-    gap: 4px;
-  }
-  .date-step {
-    width: 30px;
-    font-size: 18px;
-  }
-  /* 手机端窄 pill 放不下「今天 · 8/10」（会溢出裁切），隐藏「今天」前缀只留月/日。
-     桌面 pill 够宽，仍显示完整「今天 · 8/10」。 */
-  .date-today-tag {
-    display: none;
-  }
-
-  /* 数字键盘：吃满所有剩余高度、常驻不滚动；行高由 minmax(0,1fr) 弹性分配。
-     必须用 minmax(0,1fr) 而非 1fr——后者等价 minmax(auto,1fr)，行高不肯低于内容，
-     在编辑模式（多出"删除交易"按钮）会撑高网格、第 4 行被 overflow 裁掉（坑3）。
-     用 .add-card-2col 提高特异性：桌面版 .numpad-5{grid-template-rows:repeat(4,56px)}
-     在本文件更靠后，同特异性会反压本规则，故这里加父级选择器确保手机行高生效。
-     min-height:0 让键盘可随可用高度收缩，确保任何模式下都单屏无滚动（头号红线）。
-     行数仍为 4（新增的 = / 括号 / 清空走横向第 5 列，不加行），故单屏高度口径不变。 */
-  .add-card-2col .numpad-5 {
-    flex: 1;
-    min-height: 0;
-    grid-template-rows: repeat(4, minmax(0, 1fr));
-  }
-  .numpad-5 .key {
-    height: auto;
-    min-height: 0;
-    font-size: 20px;
-  }
-
-  /* 保存区贴底：numpad flex:1 已把它顶到底部，这里清掉桌面的 margin-top:auto 以免二次抢占 */
-  .add-right-foot {
-    margin-top: 0;
-  }
-}
-
-/* ============================================================
-   矮屏压缩（如 iPhone SE：宽≤720 且 高≤740）。
-   问题：默认手机布局的固定块（分段 + 46px 金额 + 标题 + 两行 pill + 备注 + 保存 + gap）
-   在矮屏上几乎占满可用高度，数字键盘 flex:1 被挤到只剩几十 px、按钮行高约 7px 不可用。
-   对策：仅在矮屏收紧金额字号 / 字段间距 / 卡片 gap，把高度让给键盘，
-        使 numpad 恢复到 ~160px（按钮行高 ~36px），且整屏仍不滚动（头号红线）。
-   正常高度手机（812px+）不触发本段，保持原有舒适字号。 */
-@media (max-width: 720px) and (max-height: 740px) {
-  .add-card-2col {
-    gap: 5px;
-    padding-top: 6px;
-  }
-  /* 金额区：压到 30px、去留白（矮屏省 ~50px）。
-     注意：桌面 .amount-lg / .amount-lg .val 定义在本文件更靠后（同特异性会反压 media 规则），
-     故这里用 .add-card-2col 前缀提高特异性，确保矮屏压缩真正生效（同坑见 numpad 注释）。 */
-  .add-card-2col .amount-lg {
-    padding: 0;
-  }
-  .add-card-2col .amount-lg .val {
-    font-size: 30px;
-  }
-  /* 字段：label 收小、块内间距收紧、输入框上下 padding 收窄 */
-  .add-right .field {
-    gap: 2px;
-  }
-  .add-card-2col .field-label {
-    font-size: 11px;
-  }
-  .add-card-2col .input {
-    padding: 7px 10px;
-  }
-}
 
 /* 分段控件里的 seg 是 button，补齐可点击态 */
 .segmented .seg {
@@ -1032,9 +937,7 @@ onUnmounted(() => {
   height: 20px;
 }
 
-/* 日期三件套：‹ 前一天 | 日期 pill | 后一天 ›。
-   加减按钮定宽方块（flex:none）、中间 pill 容器 flex:1 吃满剩余，
-   整行不换行、不增高——守 AddTxn 单屏无滚动红线。 */
+/* 日期三件套：加减按钮定宽，中间日期按可用宽度伸缩。 */
 .date-row {
   display: flex;
   align-items: stretch;
@@ -1205,5 +1108,42 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+/* 手机使用普通纵向表单。视口再矮也只增加滚动，不挤压字段或保存按钮。 */
+@media (max-width: 720px) {
+  .add-content { display: block; padding: 12px; }
+  .add-card-2col {
+    grid-template-columns: minmax(0, 1fr);
+    margin: 0;
+    overflow: visible;
+  }
+  .add-left { border-right: 0; padding: 16px 16px 0; gap: 16px; }
+  .add-right { padding: 16px; gap: 16px; }
+  .amount-mobile { padding: 8px 0; }
+  .amount-entry { display: flex; align-items: baseline; justify-content: center; gap: 4px; }
+  .amount-mobile .amount-input {
+    min-width: 1ch; max-width: calc(100% - 32px);
+    border: 0; border-bottom: 2px solid var(--border); border-radius: 0;
+    padding: 0 0 4px; background: transparent;
+    font-size: 42px; line-height: 1.3; text-align: center;
+  }
+  .amount-input:focus { outline: none; border-bottom-color: currentColor; }
+  .amount-input::placeholder { color: inherit; opacity: 1; }
+  .amount-help { font-size: var(--fs-sm); color: var(--fg-3); margin-top: 6px; }
+  .amount-help.neg { color: var(--expense); }
+  .add-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .add-pair .field { min-width: 0; }
+  .pill-block { min-height: 44px; flex-wrap: wrap; overflow-wrap: anywhere; }
+  .date-row { gap: 4px; }
+  .date-step { width: 28px; font-size: 18px; }
+  .date-anchor .pill { padding-inline: 6px; justify-content: center; }
+  .date-today-tag { display: none; }
+  .add-right-foot { margin-top: 0; }
+  .popover-pad:has(input[type='date']) { min-width: 190px; }
+}
+
+@media (max-width: 360px) {
+  .add-pair { grid-template-columns: minmax(0, 1fr); }
 }
 </style>

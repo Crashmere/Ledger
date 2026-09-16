@@ -116,7 +116,7 @@
 /* ---------- 2. Reset / Base ---------- */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #app { height: 100%; }
-html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; -webkit-text-size-adjust: 100%; }
 body {
   font-family: var(--font-sans);
   font-size: var(--fs-body);
@@ -417,7 +417,7 @@ svg { display: block; }
    ============================================================ */
 
 /* 默认（桌面）：手机专属元素隐藏，确保桌面零回归。 */
-.m-tabbar, .m-fab, .m-search-btn, .m-back-btn { display: none; }
+.m-navigation, .m-tabbar, .m-fab, .m-search-btn, .m-back-btn { display: none; }
 
 /* 记一笔/编辑页（add-mode）：桌面顶栏也需返回入口——此流程无侧栏可依（专注录入），
    否则桌面只能靠「保存修改/删除」离开。故让返回键在桌面 add-mode 下显现并自带尺寸样式；
@@ -435,13 +435,21 @@ svg { display: block; }
   .kbd, .kbd-hint { display: none !important; }
 
   /* --- 布局翻转：外壳竖排，侧栏收起，主区铺满 --- */
-  .app { flex-direction: column; height: 100dvh; } /* dvh 跟随移动端地址栏，比 vh 稳（坑3） */
+  .app {
+    flex-direction: column;
+    height: 100dvh;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
+  }
   .sidebar { display: none; }
   .main { flex: 1; min-height: 0; }
 
-  /* 记一笔/编辑（专注录入）路由：收起底栏 + FAB，让整屏交给记一笔外壳（头号红线：单屏无滚动）。 */
-  .app-add-mode .m-tabbar, .app-add-mode .m-fab { display: none; }
-  .app-add-mode .content { padding-bottom: 0; }
+  /* 记账表单允许滚动；返回入口在顶栏，不需要底部导航。 */
+  .app-add-mode .m-navigation { display: none; }
+  .app-add-mode .content { padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+
+  /* iOS 会在聚焦小于 16px 的输入框时自动放大页面，造成导航位置跳动。 */
+  input, select, textarea, .input, .note-inline input { font-size: 16px; }
 
   /* --- 顶栏：窄屏收紧间距，放大镜图标登场（跳 /search） --- */
   .topbar { padding: 0 16px; gap: 10px; }
@@ -463,20 +471,25 @@ svg { display: block; }
   }
   .m-back-btn:hover { background: var(--surface-2); }
 
-  /* --- 主内容区：底部留白，避免被固定底栏 + FAB 遮挡（坑2） --- */
+  /* --- 主区独立滚动，底栏实际占位，不与交易行共享可点击区域 --- */
   .content {
+    min-height: 0;
     padding: 16px;
-    padding-bottom: calc(var(--tab-h) + 28px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: 24px;
   }
 
-  /* --- 底部 tab 栏（固定，5 格：概览·账户·[FAB 让位]·报告·搜索） --- */
+  .m-navigation {
+    display: block; position: relative; flex-shrink: 0;
+    padding-top: 20px;
+    background: var(--bg);
+    z-index: 30; /* 页面弹层仍可盖住导航 */
+  }
+  /* --- 底部 tab 栏（5 格：概览·账户·[FAB 让位]·报告·搜索） --- */
   .m-tabbar {
-    position: fixed; left: 0; right: 0; bottom: 0;
     height: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px));
     padding: 0 8px env(safe-area-inset-bottom, 0px);
     background: var(--surface); border-top: 1px solid var(--border);
     display: flex; align-items: center; justify-content: space-around;
-    z-index: 30; /* 低于页面内弹层遮罩（40~60），不遮挡 modal 操作（坑7） */
   }
   .m-tab {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -489,7 +502,7 @@ svg { display: block; }
 
   /* --- 中央悬浮记账 FAB（浮在底栏中央上方，跳 /add） --- */
   .m-fab {
-    position: fixed; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+    position: absolute; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom, 0px));
     transform: translateX(-50%);
     width: 58px; height: 58px; border-radius: 50%;
     background: var(--primary); color: var(--primary-fg);

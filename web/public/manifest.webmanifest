@@ -1,0 +1,14 @@
+{
+  "id": "./",
+  "name": "Ledger 记账",
+  "short_name": "记账",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#f6f8fc",
+  "background_color": "#f6f8fc",
+  "icons": [
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

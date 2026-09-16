@@ -85,8 +85,9 @@ func TestPathPrefixThroughReverseProxy(t *testing.T) {
 	}
 	defer store.Close()
 	backend := httptest.NewServer(New(store, fstest.MapFS{
-		"index.html":    {Data: []byte("<html>ledger</html>")},
-		"assets/app.js": {Data: []byte("app")},
+		"index.html":           {Data: []byte("<html>ledger</html>")},
+		"assets/app.js":        {Data: []byte("app")},
+		"manifest.webmanifest": {Data: []byte(`{"scope":"./","start_url":"./","display":"standalone"}`)},
 	}))
 	defer backend.Close()
 	target, err := url.Parse(backend.URL)
@@ -105,10 +106,17 @@ func TestPathPrefixThroughReverseProxy(t *testing.T) {
 		mux.ServeHTTP(response, request)
 		return response
 	}
-	for _, path := range []string{"/ledger/", "/ledger/search", "/ledger/txn/example/edit", "/ledger/assets/app.js", "/ledger/healthz"} {
+	for _, path := range []string{"/ledger/", "/ledger/search", "/ledger/txn/example/edit", "/ledger/assets/app.js", "/ledger/manifest.webmanifest", "/ledger/healthz"} {
 		if response := send("GET", path, "", ""); response.Code != 200 {
 			t.Fatalf("%s: %d", path, response.Code)
 		}
+	}
+	manifest := send("GET", "/ledger/manifest.webmanifest", "", "")
+	if !strings.Contains(manifest.Header().Get("Content-Type"), "application/manifest+json") || !json.Valid(manifest.Body.Bytes()) {
+		t.Fatalf("manifest must be served as JSON, not SPA HTML: %s", manifest.Body.String())
+	}
+	if manifest.Header().Get("Cache-Control") != "no-cache" {
+		t.Fatal("manifest must be revalidated when updating desktop entry metadata")
 	}
 	input := `{"name":"合成代理测试","color":-1,"initialBalance":0,"includeInBalance":true,"kind":"normal","periodStart":null,"periodEnd":null,"archived":false}`
 	if response := send("POST", "/ledger/api/accounts", input, "http://ledger.example"); response.Code != 200 {

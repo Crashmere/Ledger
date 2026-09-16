@@ -158,35 +158,37 @@ const tabItems = navItems;
     </div>
 
 
-    <RouterLink to="/add" class="m-fab" aria-label="记一笔">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6">
-        <path d="M12 5v14M5 12h14" />
-      </svg>
-    </RouterLink>
-    <nav class="m-tabbar">
-      <template v-for="(item, idx) in tabItems" :key="item.to">
-        <RouterLink :to="item.to" class="m-tab">
+    <div class="m-navigation">
+      <RouterLink to="/add" class="m-fab" aria-label="记一笔">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      </RouterLink>
+      <nav class="m-tabbar" aria-label="主导航">
+        <template v-for="(item, idx) in tabItems" :key="item.to">
+          <RouterLink :to="item.to" class="m-tab">
 
-          <svg v-if="item.to === '/overview'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-          </svg>
+            <svg v-if="item.to === '/overview'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+            </svg>
 
-          <svg v-else-if="item.to === '/accounts'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="5" width="20" height="14" rx="2" />
-            <path d="M2 10h20" />
-          </svg>
+            <svg v-else-if="item.to === '/accounts'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="5" width="20" height="14" rx="2" />
+              <path d="M2 10h20" />
+            </svg>
 
-          <svg v-else-if="item.to === '/reports'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 3v18h18" />
-            <path d="M18 8l-5 5-3-3-4 4" />
-          </svg>
-          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7" /><path d="m21 21-4-4" /></svg>
-          {{ item.label }}
-        </RouterLink>
+            <svg v-else-if="item.to === '/reports'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 3v18h18" />
+              <path d="M18 8l-5 5-3-3-4 4" />
+            </svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7" /><path d="m21 21-4-4" /></svg>
+            {{ item.label }}
+          </RouterLink>
 
-        <span v-if="idx === 1" class="m-tab-spacer" aria-hidden="true"></span>
-      </template>
-    </nav>
+          <span v-if="idx === 1" class="m-tab-spacer" aria-hidden="true"></span>
+        </template>
+      </nav>
+    </div>
   </div>
 </template>
 

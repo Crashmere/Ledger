@@ -319,6 +319,10 @@ func (s *Server) static(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache")
 	}
 	contentType := mime.TypeByExtension(path.Ext(name))
+	// 不依赖宿主机 MIME 表：桌面入口的 manifest 在 macOS/Linux 上都返回标准类型。
+	if path.Ext(name) == ".webmanifest" {
+		contentType = "application/manifest+json"
+	}
 	if contentType != "" {
 		w.Header().Set("Content-Type", contentType)
 	}
