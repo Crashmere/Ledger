@@ -21,7 +21,7 @@ go run ./cmd/ledger serve --db var/dev.sqlite
 npm --prefix web run dev
 ```
 
-打开 Vite 输出的地址（通常是 http://127.0.0.1:5173），先到账户页新建账户，再记一笔。Vite 将 /api 请求代理给 127.0.0.1:8080。初次建库只执行一次；正常启动时库缺失会报错。
+打开 Vite 输出的地址（通常是 [http://127.0.0.1:5173](http://127.0.0.1:5173)），先到账户页新建账户，再记一笔。Vite 将 `/api` 请求代理给 `127.0.0.1:8080`。初次建库只执行一次；正常启动时库缺失会报错。
 
 如果本机 goenv 根据 go.mod 选择尚未安装的版本，可使用已有版本启动官方工具链下载，例如本次环境使用 `GOENV_VERSION=1.24.0 go ...`；这是本机版本管理器的配置，不是项目运行要求。
 
@@ -33,7 +33,7 @@ make build
 ./bin/ledger serve --db var/dev.sqlite
 ```
 
-构建时先生成 web/dist，再用 production tag 将它嵌入 Go。此时直接打开 http://127.0.0.1:8080 即可。开发构建不嵌入网页。`make linux` 生成服务器使用的 Linux amd64 单文件程序；SQLite 驱动是纯 Go，无 CGO 依赖。
+构建时先生成 web/dist，再用 production tag 将它嵌入 Go。此时直接打开 [http://127.0.0.1:8080](http://127.0.0.1:8080) 即可。开发构建不嵌入网页。`make linux` 生成服务器使用的 Linux amd64 单文件程序；SQLite 驱动是纯 Go，无 CGO 依赖。
 
 部署到共享服务器的 `/ledger/` 路径时，使用 `make linux BASE_PATH=/ledger/`。它同时设置静态资源、Vue Router 和 API 前缀；Nginx 去掉此前缀后转发给 Go。默认构建和本地开发仍使用根路径。详见 [部署维护](docs/OPERATIONS.md)。
 
