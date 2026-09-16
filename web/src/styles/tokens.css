@@ -79,7 +79,6 @@
   --sh-fab: 0 6px 16px rgba(26, 115, 232, 0.4);
 
   --tab-h: 60px;
-  --mobile-top-inset: 0px;
 
   /* 主内容最大宽度：大屏下把内容列收进一个舒适阅读宽度并居中，
      避免卡片被拉得过宽、交易行「信息 ↔ 金额」间距过大。窄屏无影响（视口 < 该值）。 */
@@ -432,8 +431,6 @@ svg { display: block; }
 .app-add-mode .m-back-btn:hover { background: var(--surface-2); }
 
 @media (max-width: 720px) {
-  :root { --mobile-top-inset: env(safe-area-inset-top, 0px); }
-
   /* 快捷键提示仅电脑端展示：手机无物理键盘，一律隐藏（不占位、不换行）。 */
   .kbd, .kbd-hint { display: none !important; }
 
@@ -441,14 +438,11 @@ svg { display: block; }
   .app {
     flex-direction: column;
     height: 100dvh;
+    padding-top: env(safe-area-inset-top, 0px);
     padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
   }
   .sidebar { display: none; }
   .main { flex: 1; min-height: 0; }
-  /* 安全区与顶栏同色，独立占位，月份控件仍在 58px 顶栏内居中。 */
-  .main::before {
-    content: ""; flex: 0 0 var(--mobile-top-inset); background: var(--surface);
-  }
 
   /* 记账表单允许滚动；返回入口在顶栏，不需要底部导航。 */
   .app-add-mode .m-navigation { display: none; }
@@ -510,12 +504,4 @@ svg { display: block; }
   }
   .m-fab:hover { background: var(--primary-strong); }
   .m-fab svg { width: 28px; height: 28px; }
-}
-
-/* iOS 浏览器工具栏的原生边缘模糊可能延伸到安全区之外。
-   12px 是额外留白，不是设备刘海高度；独立应用没有浏览器工具栏。 */
-@supports (-webkit-touch-callout: none) {
-  @media (max-width: 720px) and (hover: none) and (pointer: coarse) and (display-mode: browser) {
-    :root { --mobile-top-inset: calc(env(safe-area-inset-top, 0px) + 12px); }
-  }
 }
