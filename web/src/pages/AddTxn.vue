@@ -119,6 +119,7 @@ function dismissAmountKeyboard(event: MouseEvent): void {
 }
 
 watch(isMobile, (mobile) => {
+  if (openPicker.value === 'date') openPicker.value = null;
   if (!mobile || !isExpression(raw.value)) return;
   const value = evalExprSafe(raw.value);
   if (value !== null) raw.value = formatNum(value);
@@ -249,8 +250,9 @@ function selectToAccount(id: Id): void {
 }
 
 function onDateInput(e: Event): void {
-  const v = (e.target as HTMLInputElement).value;
-  if (v) dateStr.value = v;
+  const input = e.target as HTMLInputElement;
+  if (input.value && input.validity.valid) dateStr.value = input.value;
+  else input.value = dateStr.value;
   openPicker.value = null;
 }
 
@@ -724,19 +726,29 @@ onUnmounted(() => {
 
 
 
-        <div class="add-pair">
+        <div class="add-pair add-pair-date">
 
         <div class="field">
-          <label class="field-label">日期</label>
+          <label class="field-label" :for="isMobile ? 'txn-date' : 'txn-date-button'">日期</label>
           <div class="date-row">
             <button class="date-step" aria-label="前一天" @click="shiftDate(-1)">‹</button>
-            <div class="picker-anchor date-anchor">
-              <button class="pill pill-block" :class="{ 'pill-active': openPicker === 'date' }" @click="toggle('date')">
+            <input
+              v-if="isMobile"
+              id="txn-date"
+              class="date-input"
+              type="date"
+              required
+              :value="dateStr"
+              @focus="openPicker = null"
+              @change="onDateInput"
+            />
+            <div v-else class="picker-anchor date-anchor">
+              <button id="txn-date-button" class="pill pill-block" :class="{ 'pill-active': openPicker === 'date' }" @click="toggle('date')">
                 <span v-if="isToday" class="date-today-tag">今天 · </span>{{ dateMd }}
                 <span class="caret">▾</span>
               </button>
               <div v-if="openPicker === 'date'" class="popover popover-pad">
-                <input class="input" type="date" :value="dateStr" @change="onDateInput" />
+                <input class="input" type="date" aria-label="日期" :value="dateStr" @change="onDateInput" />
               </div>
             </div>
             <button class="date-step" aria-label="后一天" @click="shiftDate(1)">›</button>
@@ -1137,12 +1149,25 @@ onUnmounted(() => {
   .add-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .add-pair .field { min-width: 0; }
   .pill-block { min-height: 44px; flex-wrap: wrap; overflow-wrap: anywhere; }
-  .date-row { gap: 4px; }
-  .date-step { width: 28px; font-size: 18px; }
-  .date-anchor .pill { padding-inline: 6px; justify-content: center; }
-  .date-today-tag { display: none; }
+  /* 日期独占一行，直接打开系统日期选择器，不再叠加网页浮层。 */
+  .add-pair-date { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .date-row {
+    gap: 0; border: 1px solid var(--border-strong); border-radius: var(--r-md);
+    background: var(--surface);
+  }
+  .date-row:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--ring); }
+  .date-step { width: 44px; min-height: 44px; border: 0; background: transparent; }
+  .date-step:first-child { border-right: 1px solid var(--border); border-radius: 9px 0 0 9px; }
+  .date-step:last-child { border-left: 1px solid var(--border); border-radius: 0 9px 9px 0; }
+  .date-input {
+    flex: 1; width: 0; min-width: 0; min-height: 44px; padding: 8px 12px;
+    border: 0; border-radius: 0; background: transparent;
+    appearance: none; font-size: 16px; line-height: 1.45; text-align: center;
+  }
+  .date-input:focus { outline: none; }
+  .date-input::-webkit-date-and-time-value { min-height: 1.45em; text-align: center; }
+  .date-input::-webkit-datetime-edit { padding: 0; }
   .add-right-foot { margin-top: 0; }
-  .popover-pad:has(input[type='date']) { min-width: 190px; }
 }
 
 @media (max-width: 360px) {
