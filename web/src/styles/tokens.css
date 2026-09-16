@@ -412,12 +412,12 @@ svg { display: block; }
    断点体系：≥1024px 桌面（与改动前逐像素一致）；≤720px 进入手机形态。
    （各页原有的 900/960px 过渡收窄断点予以保留，作为平板宽度的两栏→单列过渡。）
    手机形态：左侧栏收起、改由底部 4 tab 栏 + 中央悬浮记账 FAB 承载导航，
-   顶栏搜索框收成放大镜图标。全部靠 @media 覆盖，无 JS 判定。
-   —— 手机专属元素（.m-tabbar / .m-fab / .m-search-btn）在桌面下 display:none。
+   搜索入口位于底部导航。全部靠 @media 覆盖，无 JS 判定。
+   —— 手机专属元素（.m-tabbar / .m-fab）在桌面下 display:none。
    ============================================================ */
 
 /* 默认（桌面）：手机专属元素隐藏，确保桌面零回归。 */
-.m-navigation, .m-tabbar, .m-fab, .m-search-btn, .m-back-btn { display: none; }
+.m-navigation, .m-tabbar, .m-fab, .m-back-btn { display: none; }
 
 /* 记一笔/编辑页（add-mode）：桌面顶栏也需返回入口——此流程无侧栏可依（专注录入），
    否则桌面只能靠「保存修改/删除」离开。故让返回键在桌面 add-mode 下显现并自带尺寸样式；
@@ -451,16 +451,8 @@ svg { display: block; }
   /* iOS 会在聚焦小于 16px 的输入框时自动放大页面，造成导航位置跳动。 */
   input, select, textarea, .input, .note-inline input { font-size: 16px; }
 
-  /* --- 顶栏：窄屏收紧间距，放大镜图标登场（跳 /search） --- */
+  /* --- 顶栏：窄屏收紧间距 --- */
   .topbar { padding: 0 16px; gap: 10px; }
-  .m-search-btn {
-    display: grid; place-items: center;
-    width: 40px; height: 40px; border-radius: var(--r-md);
-    color: var(--fg-2); flex-shrink: 0;
-  }
-  .m-search-btn:hover { background: var(--surface-2); }
-  /* 当前在搜索页时高亮放大镜（复用 router-link-active） */
-  .m-search-btn.router-link-active { color: var(--primary); background: var(--primary-soft); }
 
   /* 手机端记一笔/编辑页返回键（仅 v-if=isAddRoute 时渲染）：顶栏最左侧，负外边距贴齐 padding。 */
   .m-back-btn {

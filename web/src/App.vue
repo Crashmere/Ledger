@@ -141,13 +141,6 @@ const tabItems = navItems;
         <div class="page-title">{{ pageTitle }}</div>
         <MonthSwitch v-if="hasMonthSwitch" class="topbar-month" />
         <div id="topbar-slot" class="topbar-slot"></div>
-
-        <RouterLink to="/search" class="m-search-btn" aria-label="搜索">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="7" />
-            <path d="m21 21-4-4" />
-          </svg>
-        </RouterLink>
       </div>
       <div v-if="connectionUnavailable" class="connection-error" role="alert">
         <h3>无法连接服务器</h3>
