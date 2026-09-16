@@ -1,57 +1,118 @@
-# 部署与维护
+# Ledger 部署与维护
 
-应用以 ledger 用户运行，Go 只监听 127.0.0.1:18080。共享 Nginx 监听公网 HTTP 80，把 /ledger/ 转发给它；/ledger 自动跳到带尾斜线的地址。其他应用使用独立路径和本机端口，不需要额外公网端口。
+本文负责 Ledger 本身。先读 [文档入口](README.md)；共享主机、Nginx server 和跨项目规则见 `/opt/server-context/SKILL.md` 或 [server-operations 源](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/SKILL.md)。不要用本项目配置覆盖其他应用的共享入口。
 
-SQLite 不需要独立服务或全局实例：它是 Go 进程内的数据库引擎，账本是本地文件。每个应用使用各自的 SQLite 文件和备份目录，不跨应用共享数据库。
+目录： [当前部署](#当前部署) · [只读查看](#只读查看) · [构建与首次安装](#构建与首次安装) · [备份](#备份) · [恢复](#恢复) · [程序和配置更新](#程序和配置更新) · [文档同步](#文档同步) · [排查](#排查)
 
-## 目录和配置
+## 当前部署
+
+现场核对日期：2026-09-16。版本、PID、磁盘占用和最新备份文件名通过下文命令查看，不把不断变化的值写死在文档。
+
+```text
+浏览器 /ledger/ → 共享 Nginx :80 → Go 127.0.0.1:18080 → SQLite 文件
+```
+
+管理员使用 SSH 别名 `ali`，真实地址由本地 SSH 配置维护。无域名/TLS、无登录，用户接受知址可读写。Go 二进制内嵌 Vue 页面，服务器无需前端进程、Go 编译器、Docker 或数据库服务；主机已有其他用途的软件以共享清单为准。
 
 ```text
 /opt/ledger/
-  bin/ledger                Go 程序，内嵌 Vue 静态资源
-  bin/backup.sh             每日备份及轮换
-  config/ledger.env         本机监听、数据库和备份路径
-  config/nginx-location.conf
-  config/ledger.service
+  AGENTS.md                  项目维护入口
+  bin/ledger                 正在运行的程序，内嵌 Vue
+  bin/backup.sh              每日一致性备份与轮换
+  bin/deploy-ssh.sh           受限 SSH 发布入口
+  bin/deploy-release.sh       root 管理的固定发布脚本
+  config/ledger.env           监听、数据库、程序和备份路径
+  config/nginx-location.conf  /ledger/ 的反向代理
+  config/ledger.service       常驻程序
   config/ledger-backup.service
   config/ledger-backup.timer
-  data/ledger.sqlite        唯一正式账本，含同目录 WAL/SHM
-  backups/                  每日及手工备份
-  deployment/               root 私有的发布归档，不作为运行目录
-  docs/                     服务器上的维护说明
+  data/ledger.sqlite         唯一正式账本；可能伴随 -wal、-shm
+  backups/                   daily、手工与发布前备份
+  current-commit             当前程序对应的 Git 提交
+  releases/                  每次自动发布的程序、上一版本及结果
+  docs/                      当前项目文档和 SOURCE 来源标记
+  deploy-user/.ssh/           专用 CI 公钥与强制命令配置
+  deployment/                初始安装材料留存，不参与运行
 ```
 
-bin/config 由 root 管理，data/backups 为 ledger 所有、权限 0700。systemd 只在 /etc/systemd/system 建到 config 的链接。Nginx 的 /etc/nginx/app-locations/ledger.conf 链接到本项目 location 配置。
+| 对象 | 所有者与职责 |
+| --- | --- |
+| bin、config、docs、AGENTS、发布目录 | root 管理；程序和配置不能由应用随意改写 |
+| data、backups | ledger:ledger，目录 0700；真实数据不得进 Git |
+| ledger.service | User/Group=ledger，`ExecStart=/opt/ledger/bin/ledger serve`，异常退出自动重启；systemd 只允许写 data |
+| ledger-backup.service | ledger 身份执行备份，可写 data/backups，执行结束退出 |
+| ledger-deploy | 专用发布身份，不是管理员交互 shell；权限见 CICD |
 
-共享入口 /etc/nginx/sites-available/apps 属于全局配置；它 include /etc/nginx/app-locations/*.conf。新增应用只需增加自己的 location 文件，不改 Ledger 的数据和服务。全局服务日志用 journalctl；Nginx 请求日志遵循其全局配置。
+实际 env（当前不含秘密）：
 
-同一 IP 下的不同路径仍属浏览器同源，路径分发用于部署组织，不是应用间的安全隔离。
+```text
+LEDGER_ADDR=127.0.0.1:18080
+LEDGER_DB=/opt/ledger/data/ledger.sqlite
+LEDGER_BINARY=/opt/ledger/bin/ledger
+LEDGER_BACKUP_DIR=/opt/ledger/backups
+```
 
-## 构建与首次切换
+systemd unit 通过 `/etc/systemd/system/ledger*` 链接到 config。Nginx 的 `/etc/nginx/app-locations/ledger.conf` 链接到本项目 location；`/ledger` 返回 308 到 `/ledger/`，代理地址末尾 `/` 去掉此前缀，保留 Host。全局 server 的维护源不在 Ledger 仓库。同 IP 的不同路径仍属浏览器同源，不是安全隔离。
 
-1. 完成旧系统最后一次同步并停止写入，固定最终 Git commit。
-2. 按迁移工具说明生成新库并检查报告。真实快照、报告和数据库不进入源码仓库。
-3. 执行以下构建，将 Linux 程序、deploy/ 和已验证数据库上传到服务器独立暂存目录。
+## 只读查看
+
+本机先 `ssh ali`。当前管理员是 root，下列查看命令省略 sudo；普通账号可能需要授权读取日志与私有目录。
+
+```sh
+systemctl status ledger nginx --no-pager
+systemctl cat ledger
+cat /opt/ledger/config/ledger.env
+ps -u ledger -o pid,ppid,%cpu,%mem,etime,args
+journalctl -u ledger -n 50 --no-pager
+curl --fail http://127.0.0.1:18080/healthz
+curl --fail http://127.0.0.1/ledger/healthz
+ls -lh /opt/ledger/data/
+du -sh /opt/ledger/data/ /opt/ledger/backups/ /opt/ledger/releases/
+cat /opt/ledger/current-commit
+cat /opt/ledger/docs/SOURCE
+```
+
+两个健康接口都应返回 `{"status":"ok"}`。journal 实时跟踪使用 `journalctl -u ledger -f`，Ctrl+C 只退出查看；`less` 按 q 退出。Nginx 请求看 `/var/log/nginx/access.log`、`error.log`，不是只查 Nginx journal。
+
+SQLite 没有单独进程/服务；当前主机未安装 sqlite3 CLI，不能默认使用它。不要 cat 数据库，不要删除 WAL/SHM，不要只复制活跃主库作备份。应用自带完整性检查不修改账目，可能涉及 SQLite 的辅助文件访问：
+
+```sh
+runuser -u ledger -- /opt/ledger/bin/ledger check --db /opt/ledger/data/ledger.sqlite
+```
+
+check 成功时无输出、退出码 0；不能因为没输出就当作没执行。
+
+## 构建与首次安装
+
+只适用于新的空应用目录。现有 Ledger 更新看后面的发布流程，不能重跑首次安装或拿旧 GitHub 快照覆盖正式数据。
+
+在有相应工具链的开发机或 CI，按 go.mod 与 web/package-lock.json 准备依赖并构建：
 
 ```sh
 make test
+go vet ./...
 make linux BASE_PATH=/ledger/
 ```
 
-BASE_PATH 是构建参数，同时影响资源、Vue 路由和 API；Go 内部路由不变。根路径本地构建使用默认值 /。如需用 Vite 调试子路径，可运行 VITE_BASE_PATH=/ledger/ npm --prefix web run dev。
+产物 `bin/ledger-linux-amd64` 是 Linux amd64 单文件，SQLite 纯 Go，不依赖 CGO。`BASE_PATH` 同时设置静态资源、Vue Router 和 API 前缀；Go 内部路由不变。根路径本地构建默认 `/`。
 
-在服务器暂存目录中运行：
+将二进制、源码 `deploy/` 和初始数据上传到独立暂存目录，先校验来源/哈希。初始数据二选一：
+
+- 迁移：使用经应用工具验证的一致性备份；涉及旧格式转换才查 `tools/migrate-ivy`，日常重建不需要旧系统。
+- 明确不要历史数据的新实例：在暂存目录用 `./ledger-linux-amd64 init --db ./initial.sqlite` 创建空库。不能在已有生产目录这样处理缺库。
+
+在服务器暂存目录运行（这里开始是写操作，需要部署授权）：
 
 ```sh
-sudo bash deploy/install.sh ./ledger-linux-amd64 ./final.sqlite
-sudo systemctl status ledger
-sudo systemctl list-timers ledger-backup.timer
+sudo bash deploy/install.sh ./ledger-linux-amd64 ./initial.sqlite
+sudo systemctl status ledger --no-pager
+sudo systemctl list-timers ledger-backup.timer --no-pager
 curl --fail http://127.0.0.1:18080/healthz
 ```
 
-安装脚本仅适用于首次安装；已有 /opt/ledger 或端口被占用时退出，不覆盖账本。它创建独立用户和目录，通过 restore 生成一致性副本，启用服务及每日备份并生成首备份。脚本不会安装 Nginx，也不修改共享入口。
+初始文件名按实际调整。安装脚本遇到已有 `/opt/ledger`、旧数据位置、ledger unit 或占用的 18080 端口会退出。它创建用户、目录、配置，通过 restore 生成正式一致性副本，启用服务和 timer，执行首备份；不会安装 Nginx 或修改共享入口。
 
-新服务器的 Nginx 使用 Ubuntu 官方仓库包。安装后可参考 deploy/nginx-apps.conf 建立共享入口；必须先检查已有站点，保留原配置，不直接替换正在使用的站点。启用 Ledger 的路径：
+先按共享重建指南建立 apps server，再启用本应用（链接已存在时先检查，不强制覆盖）：
 
 ```sh
 sudo install -d -m 0755 /etc/nginx/app-locations
@@ -59,72 +120,79 @@ sudo ln -s /opt/ledger/config/nginx-location.conf /etc/nginx/app-locations/ledge
 sudo nginx -t
 sudo systemctl reload nginx
 curl --fail http://127.0.0.1/ledger/healthz
+curl --fail http://127.0.0.1/ledger/search
 ```
 
-以上要求已启用共享 apps server。云安全组与主机防火墙只需放行 80，不开放 18080。公网使用 http://服务器IP/ledger/，核对账户、月份和历史交易后只在新版记账。
+检查资源前缀和公网访问，18080 不对公网开放；云侧权限按共享指南核实。然后设置 [CI/CD](CICD.md)，同步项目 AGENTS/docs，更新共享应用清单。首次安装脚本不会自动配置 CI 或同步文档。
 
 ## 备份
 
-ledger-backup.timer 每天北京时间 03:00 运行，错过后补一次，允许五分钟随机延迟。backup.sh 用 VACUUM INTO 生成包含已提交 WAL 的一致性快照，通过完整性/外键检查后保留最近 14 份 daily-*.sqlite；手工备份不参与轮换。
+`ledger-backup.timer` 每天北京时间 03:00，允许五分钟随机延迟，错过后补执行。脚本使用 `VACUUM INTO` 生成包含已提交 WAL 的一致性快照，完整性/外键检查通过后保留最近 14 份 `daily-*.sqlite`；发布前和手工备份不轮换。
+
+查看调度与结果：
+
+```sh
+systemctl list-timers ledger-backup.timer --no-pager
+systemctl cat ledger-backup.timer ledger-backup.service
+journalctl -u ledger-backup.service -n 30 --no-pager
+ls -lht /opt/ledger/backups/
+```
+
+backup service 执行完显示 inactive 正常，失败看日志与 Result。备份文件名用 UTC，可能比北京时间日期早一天。下列命令会立即创建备份，并按 daily 规则轮换，仅在需要且获授权时执行：
 
 ```sh
 sudo systemctl start ledger-backup.service
-sudo journalctl -u ledger-backup.service -n 30 --no-pager
-sudo -u ledger /opt/ledger/bin/ledger backup --db /opt/ledger/data/ledger.sqlite --out /opt/ledger/backups/manual-20260916.sqlite
 ```
 
-目标名必须唯一，不会覆盖已有文件。不要直接复制运行中的主库。同盘备份用于误操作恢复；异机备份仍需单独安排，可通过 SSH 下载已经完成的备份文件。网页不提供数据文件下载入口。
+单独手工备份用 `ledger backup --db <正式路径> --out <不存在的唯一备份路径>`，以 ledger 身份运行；目标不能覆盖已有文件。备份同盘，目前未配置异机备份，无法抵御整盘丢失。需要时仅传输已经完成的备份文件，不能上传到源码仓库或网页公开目录。
 
 ## 恢复
 
-先校验并恢复到独立路径：
+恢复会舍弃所选备份之后的账目，必须确认来源、时点和停机范围。不要直接对现库覆盖，也不要把自动程序回退当数据库恢复。
 
-```sh
-sudo -u ledger /opt/ledger/bin/ledger check --db /opt/ledger/backups/manual-20260916.sqlite
-sudo -u ledger /opt/ledger/bin/ledger restore --from /opt/ledger/backups/manual-20260916.sqlite --db /opt/ledger/data/recovered.sqlite
-```
+1. 确认没有发布在进行；协调 GitHub 发布和维护窗口。准备所有不存在的唯一目标名称。
+2. 用应用 `check --db <选定备份>` 校验，再以 ledger 身份执行 `restore --from <备份> --db /opt/ledger/data/<唯一恢复文件>.sqlite`，校验新文件。
+3. 停止 `ledger-backup.timer`、`ledger-backup.service` 和 `ledger.service`，避免维护时发生新的写入。
+4. 用旧程序对现库生成 `before-restore-<唯一标识>.sqlite`。若现库损坏无法备份，停止并先保留主库及 WAL/SHM，不继续丢弃现场。
+5. 在明确的、全新归档目录中整体保留现库及其伴随文件，再把已校验恢复文件移到正式 `ledger.sqlite`，核对 ledger 所有权与 0600 权限。不要把旧 WAL/SHM 留给新主库。
+6. 启动应用与 timer，验证直连/代理健康，浏览器重新加载后只读核对账目；结果不符合预期先停止写入，不继续反复覆盖。
 
-正式替换会丢弃恢复时点后的账目，执行前先确认恢复时点。停止 timer 和应用后保存现状，再替换；以下归档目录必须不存在：
+按本次实际路径准备并审阅命令后再执行，任一步失败先排查。归档和恢复前备份暂留供回退；清理必须明确文件范围并确认。不提供可误复制执行的固定日期删除/替换命令。
 
-```sh
-sudo systemctl stop ledger-backup.timer ledger-backup.service ledger.service
-sudo -u ledger /opt/ledger/bin/ledger backup --db /opt/ledger/data/ledger.sqlite --out /opt/ledger/backups/before-restore-20260916.sqlite
-sudo mkdir -m 0700 /opt/ledger/data/before-restore-20260916
-sudo mv /opt/ledger/data/ledger.sqlite /opt/ledger/data/before-restore-20260916/
-sudo bash -c 'for suffix in -wal -shm; do if [ -e "/opt/ledger/data/ledger.sqlite$suffix" ]; then mv "/opt/ledger/data/ledger.sqlite$suffix" /opt/ledger/data/before-restore-20260916/; fi; done'
-sudo mv /opt/ledger/data/recovered.sqlite /opt/ledger/data/ledger.sqlite
-sudo chown ledger:ledger /opt/ledger/data/ledger.sqlite
-sudo systemctl start ledger.service ledger-backup.timer
-curl --fail http://127.0.0.1/ledger/healthz
-```
+## 程序和配置更新
 
-任一步失败先停下排查，不继续覆盖。若现库损坏无法备份，保留原库和伴随文件再处理。重启后浏览器重新加载，不从旧 GitHub 快照再次覆盖正式库。
+日常程序更新走 main → GitHub Actions，流程、权限、备份与自动回退见 [CICD.md](CICD.md)。写入生产之前通过合成测试。发布历史不自动清理。
 
-## 更新程序
+管理员紧急手工发布优先复用已安装的 `/opt/ledger/bin/deploy-release.sh`：对已验证产物提供完整源码 commit 与 SHA-256，从 stdin 输入二进制。该脚本已有锁、停服备份、候选校验、原子替换和健康回退；不要另写一套直接覆盖可执行文件的快捷命令。必须先读源码并确认权限、来源与参数，具体接口见 CICD。
 
-日常更新优先推送 main，GitHub Actions 检查通过后自动备份、发布并验证；权限、记录与失败回退见 [CI/CD](CICD.md)。下面保留管理员手工更新流程，用于排障或首次配置。
+配置变更不会随二进制发布：
 
-本地先 make test 和 make linux BASE_PATH=/ledger/。将新程序上传到独立暂存目录；停服后备份，保留旧程序，再安装：
+- unit/env/location/备份或发布脚本改动先更新本仓库 deploy，再由管理员审阅、对照现场、安装到明确路径。
+- unit 改动需要 `systemctl daemon-reload`；env/程序启动参数变动需要受控重启 Ledger。
+- Nginx location 变更先 `nginx -t` 再 reload，并检查全部现有应用；不要重写共享 server。涉及全局模板时同时改 agent-config。
+- schema 变更需要升级/兼容/回退方案和测试。当前存储支持版本 1，不是通用自动迁移框架；不能仅把 SQL 文件放进去就假定旧库会安全升级。
+- 手工回退仍需先备份、确认旧程序兼容当前 schema；数据库恢复始终走独立人工确认流程。
 
-```sh
-sudo systemctl stop ledger
-sudo -u ledger /opt/ledger/bin/ledger backup --db /opt/ledger/data/ledger.sqlite --out /opt/ledger/backups/before-upgrade-20260916.sqlite
-sudo cp -n /opt/ledger/bin/ledger /opt/ledger/bin/ledger.previous-20260916
-sudo install -m 0755 ./ledger-linux-amd64 /opt/ledger/bin/ledger
-sudo systemctl start ledger
-curl --fail http://127.0.0.1/ledger/healthz
-```
+## 文档同步
 
-日期示例每次应改成唯一名称。纯程序更新失败可在停服后恢复旧程序。修改 config 中的 unit 后运行 systemctl daemon-reload；修改 Nginx location 后先 nginx -t 再 reload，不影响其他应用。schema 变更需新增顺序迁移并配套升级、回退步骤，不通过重跑首次安装覆盖数据。
+本仓库是项目文档源；服务器 `/opt/ledger/docs` 是供现场阅读的副本，不是另一个独立版本。每次变更主动更新相应 docs，覆盖旧说明。完整共享同步规程见 [maintenance.md](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/maintenance.md)，服务器同名文件在 `/opt/server-context/references/maintenance.md`。
+
+项目文档白名单为当前 Git 跟踪的 `AGENTS.md` 与 `docs/*.md`，先用 `git ls-files` 审阅，再从已提交版本 `git archive` 导出。禁止直接递归上传本地 docs：被忽略的验收文件可能包含真实账目。
+
+由管理员上传到独立暂存目录，安装项目入口到 `/opt/ledger/AGENTS.md`，文档到 `/opt/ledger/docs/`，均 root:root/0644；最终写 `docs/SOURCE`，记录 repository、完整 commit、subdirectory、synced_at。逐文件比较哈希，删除文档时明确同步移除已知受管理旧文件。不要改 `current-commit` 来假装文档和程序是同一版本。
+
+普通 CI 不同步文档，也不自动应用配置。推送 main 的文档提交若不需发布可按 CICD 使用 skip 标记，仍必须同步服务器副本。应用源码改动不能借此跳过应该执行的测试/部署。
 
 ## 排查
 
-```sh
-sudo journalctl -u ledger -n 100 --no-pager
-sudo systemctl status ledger ledger-backup.timer nginx
-sudo -u ledger /opt/ledger/bin/ledger check --db /opt/ledger/data/ledger.sqlite
-curl --fail http://127.0.0.1:18080/healthz
-curl --fail http://127.0.0.1/ledger/healthz
-```
+| 现象 | 首先检查 |
+| --- | --- |
+| 直连 18080 健康失败 | ledger unit/journal、env、路径/权限；不要创建空库 |
+| 直连成功，/ledger/ 失败 | Nginx location/link、语法、80、安全组；根 / 的 404 正常 |
+| 页面能打开但资源/API 失败 | 构建 BASE_PATH、Vue/API 前缀、代理去前缀、Host；测试深链接 |
+| 发布失败 | Actions 日志、releases/result、ledger journal；见 CICD 回退含义 |
+| 备份服务 inactive | 先查 Result/journal 与文件，oneshot 完成后本来就退出 |
+| 磁盘增长 | data/backups/releases；发布历史不自动轮换，不擅自删 WAL |
+| 写请求结果不明 | 先只读核对是否已保存，不自动重试写入 |
 
-本机端口正常而公网失败时检查 Nginx、80 端口和安全组。页面正常但资源/API 错误时核对构建 BASE_PATH 与 Nginx 前缀。缺库启动失败时检查路径和权限，不要 init 一个空账本。写请求结果不明先查账核对，不自动重试。
+主机其他失败 unit、外部工具和共享问题以服务器清单为入口；不要把 Ledger 运维扩大成未经授权的整机清理。

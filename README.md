@@ -65,10 +65,10 @@ make build
 
 ## 阅读顺序
 
-先看 [架构与两条调用链](docs/ARCHITECTURE.md)，再按需要查 [API](docs/API.md)。建议从“保存一笔”读起，然后读“筛选交易并统计”：
+维护者先看 [文档入口与已确认约定](docs/README.md) 和 [Agent 维护指引](AGENTS.md)。代码先看 [架构与两条调用链](docs/ARCHITECTURE.md)，再按需要查 [API](docs/API.md)。建议从“保存一笔”读起，然后读“筛选交易并统计”：
 
 1. `web/src/pages/AddTxn.vue` → `web/src/api/index.ts` → `internal/httpapi/server.go` → `internal/ledger/transactions.go`。
 2. `web/src/pages/Search.vue` → `internal/ledger/filters.go` → `transactions.go` / `statistics.go`。
 3. `model.go` 和 `migrations/001_initial.sql` 描述类型和持久字段；`ledger_test.go` 是业务规则的具体例子。
 
-日常维护以本 README、docs 和代码为准；本地迁移审阅和验收资料不随源码提交。
+日常维护以本 README、docs 和代码为准；变更后主动更新对应文档及服务器副本。共享主机约定由 [server-operations](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/SKILL.md) 统一维护，本地迁移审阅和验收资料不随源码提交。

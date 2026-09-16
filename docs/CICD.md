@@ -6,7 +6,7 @@ GitHub Actions 的 CI and deploy 工作流负责日常发布：
 - 推送 main：同样检查通过后上传 Linux 程序，通过 SSH 更新服务器。
 - Actions 页面也可手动运行；只有 main 允许部署。过期提交在发布前会被跳过。同一分支工作流串行，服务器再用 flock 防止两次发布重叠。
 
-服务器不安装 Go、Node、Docker 或 GitHub Runner。Actions 使用 GitHub 官方托管 runner，官方 actions 固定到 commit SHA。
+Ledger 不需要服务器安装 Go、Node、Docker 或 GitHub Runner；主机已有其他用途的工具不属于本项目依赖，也不要因此删除。Actions 使用 GitHub 官方托管 runner，官方 actions 固定到 commit SHA。
 
 ## 发布做什么
 
@@ -18,6 +18,8 @@ GitHub Actions 的 CI and deploy 工作流负责日常发布：
 6. 成功后记录 /opt/ledger/current-commit；失败则恢复旧程序并重启，返回失败使 Actions 标红。
 
 通常只有备份与重启期间短暂停服。不会上传数据库，不会重复导入旧快照，不更新 Nginx、systemd、环境配置或发布脚本本身。没有数据库自动回退：候选程序若改变 schema，需要单独设计迁移和恢复流程，不能指望旧程序一定兼容。
+
+文档也不随二进制自动上传。当前任何 main 推送（包括只改 Markdown）都会执行检查和发布；只更新文档且不需要发布时可使用 GitHub 支持的 `[skip ci]` 提交标记，先确认本次确实没有运行代码或部署逻辑改动。共享/项目文档需管理员按 [OPERATIONS.md](OPERATIONS.md) 的同步流程更新服务器副本，不能只推 GitHub 就认为服务器文档已更新。
 
 ## 权限与密钥
 
