@@ -72,12 +72,12 @@ func previewBatch(ctx context.Context, tx *sql.Tx, input BatchRequest) (BatchPre
 		kind, amount, err := parseAmount(row.AmountInput)
 		title := strings.TrimSpace(row.Title)
 		note := strings.TrimSpace(row.Note)
-		draft := TransactionInput{Type: kind, Amount: amount, AccountID: row.AccountID, CategoryID: row.CategoryID, Date: row.Date, Title: &title, Note: &note, TagIDs: []string{}}
+		draft := TransactionInput{Type: kind, Amount: amount, AccountID: row.AccountID, CategoryID: row.CategoryID, Date: row.Date, Title: &title, Note: &note}
 		if err == nil && title == "" {
 			err = invalid("title", "请填写标题")
 		}
 		if err == nil {
-			_, _, err = validateTransaction(ctx, tx, draft)
+			_, err = validateTransaction(ctx, tx, draft)
 		}
 		if err != nil {
 			var domain *Error

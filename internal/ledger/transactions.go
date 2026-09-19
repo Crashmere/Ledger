@@ -19,7 +19,6 @@ func readTransactions(ctx context.Context, q querier, query string, args ...any)
 	}
 	for rows.Next() {
 		var t Transaction
-		t.Tags = []Tag{}
 		if err = rows.Scan(&t.ID, &t.Type, &t.Amount, &t.AccountID, &t.ToAccountID, &t.CategoryID, &t.Time, &t.Title, &t.Note, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			rows.Close()
 			return nil, err
@@ -32,30 +31,7 @@ func readTransactions(ctx context.Context, q querier, query string, args ...any)
 	if err != nil {
 		return nil, err
 	}
-	if len(result) == 0 {
-		return result, nil
-	}
-	ids := make([]any, len(result))
-	indices := map[string]int{}
-	for i, t := range result {
-		ids[i] = t.ID
-		indices[t.ID] = i
-	}
-	rows, err = q.QueryContext(ctx, "SELECT tt.txn_id,g.id,g.name,g.color,g.icon,g.order_num,g.created_at FROM txn_tag tt JOIN tag g ON g.id=tt.tag_id WHERE g.is_delete=0 AND tt.txn_id IN ("+placeholders(len(ids))+") ORDER BY g.order_num,g.id", ids...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		var g Tag
-		if err = rows.Scan(&id, &g.ID, &g.Name, &g.Color, &g.Icon, &g.OrderNum, &g.CreatedAt); err != nil {
-			return nil, err
-		}
-		index := indices[id]
-		result[index].Tags = append(result[index].Tags, g)
-	}
-	return result, rows.Err()
+	return result, nil
 }
 func (s *Store) Transaction(ctx context.Context, id string) (Transaction, error) {
 	var result Transaction
@@ -72,58 +48,49 @@ func (s *Store) Transaction(ctx context.Context, id string) (Transaction, error)
 	})
 	return result, err
 }
-func validateTransaction(ctx context.Context, tx *sql.Tx, input TransactionInput) (int64, []string, error) {
+func validateTransaction(ctx context.Context, tx *sql.Tx, input TransactionInput) (int64, error) {
 	if !slices.Contains([]string{"income", "expense", "transfer"}, input.Type) {
-		return 0, nil, invalid("type", "交易类型无效")
+		return 0, invalid("type", "交易类型无效")
 	}
 	if input.Amount <= 0 || input.Amount > MaxCents {
-		return 0, nil, invalid("amount", "金额须为安全范围内的正整数分")
+		return 0, invalid("amount", "金额须为安全范围内的正整数分")
 	}
 	date, err := ParseDate(input.Date)
 	if err != nil {
-		return 0, nil, err
+		return 0, err
 	}
 	if err = exists(ctx, tx, "account", input.AccountID); err != nil {
-		return 0, nil, invalid("accountId", "请选择有效账户")
+		return 0, invalid("accountId", "请选择有效账户")
 	}
 	if input.Type == "transfer" {
 		if input.CategoryID != nil {
-			return 0, nil, invalid("categoryId", "转账不能设置分类")
+			return 0, invalid("categoryId", "转账不能设置分类")
 		}
 		if input.ToAccountID == nil || *input.ToAccountID == input.AccountID {
-			return 0, nil, invalid("toAccountId", "请选择不同的转入账户")
+			return 0, invalid("toAccountId", "请选择不同的转入账户")
 		}
 		if err = exists(ctx, tx, "account", *input.ToAccountID); err != nil {
-			return 0, nil, invalid("toAccountId", "转入账户无效")
+			return 0, invalid("toAccountId", "转入账户无效")
 		}
 	} else if input.ToAccountID != nil {
-		return 0, nil, invalid("toAccountId", "收支交易不能带转入账户")
+		return 0, invalid("toAccountId", "收支交易不能带转入账户")
 	}
 	if input.CategoryID != nil {
 		var accountID string
 		if err = tx.QueryRowContext(ctx, "SELECT account_id FROM category WHERE id=? AND is_delete=0", *input.CategoryID).Scan(&accountID); err != nil || accountID != input.AccountID {
-			return 0, nil, invalid("categoryId", "分类不存在或不属于当前账户")
+			return 0, invalid("categoryId", "分类不存在或不属于当前账户")
 		}
 	}
 	if err = validateText("title", input.Title, 500); err != nil {
-		return 0, nil, err
+		return 0, err
 	}
 	if err = validateText("note", input.Note, 10000); err != nil {
-		return 0, nil, err
+		return 0, err
 	}
-	tags, err := uniqueIDs(input.TagIDs)
-	if err != nil {
-		return 0, nil, err
-	}
-	for _, id := range tags {
-		if err = exists(ctx, tx, "tag", id); err != nil {
-			return 0, nil, invalid("tagIds", "标签已失效")
-		}
-	}
-	return date.UnixMilli(), tags, nil
+	return date.UnixMilli(), nil
 }
 func saveTransaction(ctx context.Context, tx *sql.Tx, id string, input TransactionInput) (string, error) {
-	ms, tags, err := validateTransaction(ctx, tx, input)
+	ms, err := validateTransaction(ctx, tx, input)
 	if err != nil {
 		return "", err
 	}
@@ -146,14 +113,6 @@ func saveTransaction(ctx context.Context, tx *sql.Tx, id string, input Transacti
 	}
 	if err != nil {
 		return "", err
-	}
-	if _, err = tx.ExecContext(ctx, "DELETE FROM txn_tag WHERE txn_id=?", id); err != nil {
-		return "", err
-	}
-	for _, tag := range tags {
-		if _, err = tx.ExecContext(ctx, "INSERT INTO txn_tag(txn_id,tag_id) VALUES(?,?)", id, tag); err != nil {
-			return "", err
-		}
 	}
 	return id, nil
 }

@@ -19,7 +19,7 @@ import (
 	"modernc.org/sqlite"
 )
 
-//go:embed migrations/*.sql
+//go:embed schema.sql migrations/*.sql
 var migrations embed.FS
 
 // Store 的唯一连接由 database/sql 管理；所有多步写入使用 sql.Tx。
@@ -106,15 +106,17 @@ func (s *Store) initialize(create bool) error {
 		return err
 	}
 	if create {
-		schema, err := migrations.ReadFile("migrations/001_initial.sql")
+		schema, err := migrations.ReadFile("schema.sql")
 		if err != nil {
 			return err
 		}
 		if err = s.transaction(ctx, func(tx *sql.Tx) error { _, e := tx.ExecContext(ctx, string(schema)); return e }); err != nil {
 			return err
 		}
-	} else if version != 1 {
-		return fmt.Errorf("不支持的数据库版本 %d（当前为 1）", version)
+	} else if version == 1 {
+		return fmt.Errorf("数据库版本 1 需要显式升级：使用 migrate --from <原库或备份> --db <新路径> 生成版本 2 副本")
+	} else if version != 2 {
+		return fmt.Errorf("不支持的数据库版本 %d（当前为 2）", version)
 	}
 	var result string
 	if err := s.db.QueryRowContext(ctx, "PRAGMA quick_check").Scan(&result); err != nil {

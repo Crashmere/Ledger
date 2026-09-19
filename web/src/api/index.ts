@@ -1,6 +1,6 @@
 import { request } from './client';
-import type { Account, AccountInput, Category, Tag, TransactionInput, TransactionQuery, TransactionPage,
-  TxnWithTags, TransactionFilter, Summary, CategoryTotal, DailyResult, BatchRow, BatchPreview } from './types';
+import type { Account, AccountInput, Category, TransactionInput, TransactionQuery, TransactionPage,
+  Transaction, TransactionFilter, Summary, CategoryTotal, DailyResult, BatchRow, BatchPreview } from './types';
 export * from './types';
 export { AppError } from './client';
 export { format, yuanToCents, centsToYuan } from '../services/money';
@@ -22,17 +22,11 @@ export const categoryService = {
   remove: (id: string) => request('/categories/' + idPath(id), 'DELETE'),
   reorder: (id: string, ids: string[]) => request('/accounts/' + idPath(id) + '/categories/reorder', 'POST', { ids }),
 };
-export const tagService = {
-  list: () => request<Tag[]>('/tags'),
-  create: (input: { name: string; color: number }) => request<Tag>('/tags', 'POST', input),
-  update: (id: string, input: { name: string; color: number }) => request<Tag>('/tags/' + idPath(id), 'PUT', input),
-  remove: (id: string) => request('/tags/' + idPath(id), 'DELETE'),
-};
 export const txnService = {
-  get: (id: string) => request<TxnWithTags>('/transactions/' + idPath(id)),
+  get: (id: string) => request<Transaction>('/transactions/' + idPath(id)),
   query: (input: TransactionQuery) => request<TransactionPage>('/transactions/query', 'POST', input),
-  create: (input: TransactionInput) => request<TxnWithTags>('/transactions', 'POST', input),
-  update: (id: string, input: TransactionInput) => request<TxnWithTags>('/transactions/' + idPath(id), 'PUT', input),
+  create: (input: TransactionInput) => request<Transaction>('/transactions', 'POST', input),
+  update: (id: string, input: TransactionInput) => request<Transaction>('/transactions/' + idPath(id), 'PUT', input),
   remove: (id: string) => request('/transactions/' + idPath(id), 'DELETE'),
   preview: (rows: BatchRow[]) => request<BatchPreview>('/transactions/batch/preview', 'POST', { rows }),
   batch: (rows: BatchRow[]) => request<BatchPreview>('/transactions/batch', 'POST', { rows }),

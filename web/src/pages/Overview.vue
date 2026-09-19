@@ -13,7 +13,7 @@ import {
   type Category,
   type Id,
   emptySummary, type DayTotal,
-  type TxnWithTags,
+  type Transaction,
 } from '../api';
 
 import Pagination from '../components/Pagination.vue';
@@ -33,7 +33,7 @@ const page = ref(1);
 const total = ref(0);
 const dayTotals = ref<Record<string, DayTotal>>({});
 const error = ref('');
-const txns = ref<TxnWithTags[]>([]);
+const txns = ref<Transaction[]>([]);
 const accounts = ref<Account[]>([]);
 const balanceById = ref<Map<Id, number>>(new Map());
 const categoryById = ref<Map<Id, Category>>(new Map());
@@ -112,7 +112,7 @@ function categoryName(id: Id | null): string {
   return categoryById.value.get(id)?.name ?? '';
 }
 
-function txnColor(t: TxnWithTags): string {
+function txnColor(t: Transaction): string {
   if (t.type === 'transfer') return 'var(--transfer)';
   if (t.categoryId) {
     const cat = categoryById.value.get(t.categoryId);
@@ -122,7 +122,7 @@ function txnColor(t: TxnWithTags): string {
   return acc ? argbToCss(acc.color) : 'var(--fg-3)';
 }
 
-function txnTitle(t: TxnWithTags): string {
+function txnTitle(t: Transaction): string {
   if (t.title && t.title.trim()) return t.title;
   const cat = categoryName(t.categoryId);
   if (cat) return cat;
@@ -130,7 +130,7 @@ function txnTitle(t: TxnWithTags): string {
   return '(无标题)';
 }
 
-function txnSub(t: TxnWithTags): string {
+function txnSub(t: Transaction): string {
   if (t.type === 'transfer') {
     return `${accountName(t.accountId)} → ${accountName(t.toAccountId)}`;
   }
@@ -138,13 +138,13 @@ function txnSub(t: TxnWithTags): string {
   return cat ? `${accountName(t.accountId)} · ${cat}` : accountName(t.accountId);
 }
 
-function txnAmountText(t: TxnWithTags): string {
+function txnAmountText(t: Transaction): string {
   if (t.type === 'expense') return `−${format(t.amount)}`;
   if (t.type === 'income') return `+${format(t.amount)}`;
   return format(t.amount); // transfer：不带正负
 }
 
-function txnAmountClass(t: TxnWithTags): string {
+function txnAmountClass(t: Transaction): string {
   if (t.type === 'expense') return 'neg';
   if (t.type === 'income') return 'pos';
   return 'tr';
@@ -246,10 +246,6 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
                 </div>
                 <div class="txn-sub">
                   {{ txnSub(t) }}
-                  <template v-if="t.tags.length">
-                    <span class="sep" />
-                    <span v-for="tag in t.tags" :key="tag.id" class="tag-inline">{{ tag.name }}</span>
-                  </template>
                 </div>
 
                 <div v-if="t.note && t.note.trim()" class="txn-note" :title="t.note">{{ t.note }}</div>

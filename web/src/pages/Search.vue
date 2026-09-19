@@ -6,16 +6,14 @@ import { useSelectedMonth } from '../composables/useSelectedMonth';
 import {
   accountService,
   categoryService,
-  tagService,
   txnService, statsService, emptySummary,
   format,
   type Account,
   type Category,
   type Id,
-  type Tag,
   type TxnType,
   type TransactionFilter,
-  type TxnWithTags,
+  type Transaction,
 } from '../api';
 
 import Pagination from '../components/Pagination.vue';
@@ -37,14 +35,13 @@ function copyTxn(id: Id): void {
 
 const keyword = ref<string>('');
 
-type SearchField = 'title' | 'note' | 'category' | 'tag';
+type SearchField = 'title' | 'note' | 'category';
 const SEARCH_FIELDS: ReadonlyArray<{ v: SearchField; label: string }> = [
   { v: 'title', label: '标题' },
   { v: 'note', label: '备注' },
   { v: 'category', label: '分类' },
-  { v: 'tag', label: '标签' },
 ];
-const DEFAULT_SEARCH_FIELDS: SearchField[] = ['title', 'note', 'category', 'tag'];
+const DEFAULT_SEARCH_FIELDS: SearchField[] = ['title', 'note', 'category'];
 const searchFields = ref<SearchField[]>([...DEFAULT_SEARCH_FIELDS]);
 function fieldOn(f: SearchField): boolean {
   return searchFields.value.includes(f);
@@ -62,7 +59,6 @@ function toggleField(f: SearchField): void {
 const selectedTypes = ref<TxnType[]>([]); // 搜索页允许筛 transfer（与报告页不同）
 const selectedAccountIds = ref<Id[]>([]);
 const selectedCategoryNames = ref<string[]>([]); // 展示层按名去重，同名跨账户都算
-const selectedTagIds = ref<Id[]>([]);
 const amountMinCents = ref<number | null>(null);
 const amountMaxCents = ref<number | null>(null);
 
@@ -77,7 +73,6 @@ const SORT_OPTS: ReadonlyArray<{ v: SortSel; label: string }> = [
 
 const accounts = ref<Account[]>([]);
 const allCategories = ref<Category[]>([]);
-const tags = ref<Tag[]>([]);
 const categoryById = ref<Map<Id, Category>>(new Map());
 
 const uniqueCategoryNames = computed<string[]>(() => {
@@ -93,13 +88,12 @@ const uniqueCategoryNames = computed<string[]>(() => {
 });
 
 async function loadStatic(): Promise<void> {
-  const [result, cats, tagList] = await Promise.all([accountService.list(), categoryService.list(), tagService.list()]);
+  const [result, cats] = await Promise.all([accountService.list(), categoryService.list()]);
   accounts.value = result.items;
   allCategories.value = cats;
   categoryById.value = new Map(cats.map(c => [c.id, c]));
-  tags.value = tagList;
 }
-const hitTxns = ref<TxnWithTags[]>([]);
+const hitTxns = ref<Transaction[]>([]);
 const summary = ref(emptySummary());
 const loading = ref(false);
 const initializing = ref(true);
@@ -126,7 +120,6 @@ const activeQuery = computed<TransactionFilter>(() => {
   if (selectedAccountIds.value.length > 0) q.accountIds = [...selectedAccountIds.value];
   const catIds = categoryIdsForNames(selectedCategoryNames.value);
   if (catIds.length > 0) q.categoryIds = catIds;
-  if (selectedTagIds.value.length > 0) q.tagIds = [...selectedTagIds.value];
   if (amountMinCents.value !== null) q.amountMin = amountMinCents.value;
   if (amountMaxCents.value !== null) q.amountMax = amountMaxCents.value;
   return q;
@@ -212,7 +205,7 @@ function selectTxn(id: Id): void {
   selectedId.value = id;
 }
 
-const selectedTxn = computed<TxnWithTags | null>(
+const selectedTxn = computed<Transaction | null>(
   () => hitTxns.value.find((t) => t.id === selectedId.value) ?? null,
 );
 
@@ -264,7 +257,7 @@ function onSearchGlobalKeydown(e: KeyboardEvent): void {
   }
 }
 
-function rowDateText(t: TxnWithTags): string { return dayLabel(t.date); }
+function rowDateText(t: Transaction): string { return dayLabel(t.date); }
 
 function argbToCss(argb: number): string {
   const u = argb >>> 0;
@@ -289,7 +282,7 @@ function categoryName(id: Id | null): string {
   return categoryById.value.get(id)?.name ?? '';
 }
 
-function txnColor(t: TxnWithTags): string {
+function txnColor(t: Transaction): string {
   if (t.type === 'transfer') return 'var(--transfer)';
   if (t.categoryId) {
     const cat = categoryById.value.get(t.categoryId);
@@ -298,7 +291,7 @@ function txnColor(t: TxnWithTags): string {
   return accountColor(t.accountId);
 }
 
-function txnTitle(t: TxnWithTags): string {
+function txnTitle(t: Transaction): string {
   if (t.title && t.title.trim()) return t.title;
   const cat = categoryName(t.categoryId);
   if (cat) return cat;
@@ -306,12 +299,12 @@ function txnTitle(t: TxnWithTags): string {
   return '(无标题)';
 }
 
-function txnAmountText(t: TxnWithTags): string {
+function txnAmountText(t: Transaction): string {
   if (t.type === 'expense') return `−${fmtMoney(t.amount)}`;
   if (t.type === 'income') return `+${fmtMoney(t.amount)}`;
   return fmtMoney(t.amount); // transfer：不带正负
 }
-function txnAmountClass(t: TxnWithTags): string {
+function txnAmountClass(t: Transaction): string {
   if (t.type === 'expense') return 'neg';
   if (t.type === 'income') return 'pos';
   return 'tr';
@@ -323,8 +316,8 @@ function typeBadgeClass(t: TxnType): string {
   return t === 'income' ? 'badge-income' : t === 'expense' ? 'badge-expense' : 'badge-transfer';
 }
 
-function fullDateTimeText(t: TxnWithTags): string { return t.date.slice(0,4) + '年' + dayLabel(t.date); }
-function isoDate(t: TxnWithTags): string { return t.date; }
+function fullDateTimeText(t: Transaction): string { return t.date.slice(0,4) + '年' + dayLabel(t.date); }
+function isoDate(t: Transaction): string { return t.date; }
 
 function withThousands(s: string): string {
   return s.replace(/\d+(?=\.)/, (m) => m.replace(/\B(?=(\d{3})+(?!\d))/g, ','));
@@ -392,7 +385,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onSearchGlobalKeydown);
 });
 
-type AddDim = 'type' | 'account' | 'category' | 'tag' | 'amount';
+type AddDim = 'type' | 'account' | 'category' | 'amount';
 const addOpen = ref(false);
 const addDim = ref<AddDim | null>(null);
 const amountMinInput = ref<string>('');
@@ -424,11 +417,6 @@ function toggleCategoryName(name: string): void {
   if (i >= 0) selectedCategoryNames.value.splice(i, 1);
   else selectedCategoryNames.value.push(name);
 }
-function toggleTag(id: Id): void {
-  const i = selectedTagIds.value.indexOf(id);
-  if (i >= 0) selectedTagIds.value.splice(i, 1);
-  else selectedTagIds.value.push(id);
-}
 function applyAmount(): void {
   const min = amountMinInput.value.trim();
   const max = amountMaxInput.value.trim();
@@ -450,16 +438,12 @@ const amountChipLabel = computed<string>(() => {
 });
 const hasAmountChip = computed(() => amountMinCents.value !== null || amountMaxCents.value !== null);
 
-function tagName(id: Id): string {
-  return tags.value.find((t) => t.id === id)?.name ?? '';
-}
 
 const hasAnyFilter = computed(
   () =>
     selectedTypes.value.length > 0 ||
     selectedAccountIds.value.length > 0 ||
     selectedCategoryNames.value.length > 0 ||
-    selectedTagIds.value.length > 0 ||
     hasAmountChip.value ||
     filterByMonth.value ||
     keyword.value.trim().length > 0 ||
@@ -470,7 +454,6 @@ function clearAll(): void {
   selectedTypes.value = [];
   selectedAccountIds.value = [];
   selectedCategoryNames.value = [];
-  selectedTagIds.value = [];
   clearAmount();
   keyword.value = '';
   searchFields.value = [...DEFAULT_SEARCH_FIELDS];
@@ -518,7 +501,7 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
         class="input"
         v-model="keyword"
         aria-label="搜索交易"
-        placeholder="搜索标题 / 备注 / 分类 / 标签…"
+        placeholder="搜索标题 / 备注 / 分类…"
         @keydown.enter="onSearchEnter"
       />
       <button v-if="keyword" class="s-clear" aria-label="清除" @click="clearKeyword">
@@ -561,10 +544,6 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
         分类：{{ name }}
         <span class="x" role="button" tabindex="0" aria-label="删除筛选" @click="toggleCategoryName(name)" @keydown.enter.prevent="toggleCategoryName(name)" @keydown.space.prevent="toggleCategoryName(name)">×</span>
       </span>
-      <span v-for="id in selectedTagIds" :key="'tg-' + id" class="chip chip-on">
-        标签：{{ tagName(id) }}
-        <span class="x" role="button" tabindex="0" aria-label="删除筛选" @click="toggleTag(id)" @keydown.enter.prevent="toggleTag(id)" @keydown.space.prevent="toggleTag(id)">×</span>
-      </span>
       <span v-if="hasAmountChip" class="chip chip-on">
         金额：{{ amountChipLabel }}
         <span class="x" role="button" tabindex="0" aria-label="删除筛选" @click="clearAmount()" @keydown.enter.prevent="clearAmount()" @keydown.space.prevent="clearAmount()">×</span>
@@ -586,7 +565,6 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
             <button class="add-item" @click="addDim = 'type'">类型</button>
             <button class="add-item" @click="addDim = 'account'">账户</button>
             <button class="add-item" @click="addDim = 'category'">分类</button>
-            <button class="add-item" @click="addDim = 'tag'">标签</button>
             <button class="add-item" @click="addDim = 'amount'">金额范围</button>
           </template>
 
@@ -631,18 +609,6 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
               </button>
             </template>
 
-            <template v-else-if="addDim === 'tag'">
-              <div v-if="tags.length === 0" class="add-empty">暂无标签</div>
-              <button
-                v-for="tg in tags"
-                :key="tg.id"
-                class="add-opt"
-                :class="{ sel: selectedTagIds.includes(tg.id) }"
-                @click="toggleTag(tg.id)"
-              >
-                {{ tg.name }}
-              </button>
-            </template>
 
             <template v-else-if="addDim === 'amount'">
               <div class="add-amount">
@@ -802,15 +768,6 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
                     <span ><HighlightText :text="categoryName(t.categoryId)" :keyword="fieldOn('category') ? keyword : ''" /></span>
                   </template>
                 </template>
-                <template v-if="t.tags.length">
-                  <span class="sep" />
-                  <span
-                    v-for="tag in t.tags"
-                    :key="tag.id"
-                    class="tag-inline"
-
-                  ><HighlightText :text="tag.name" :keyword="fieldOn('tag') ? keyword : ''" /></span>
-                </template>
               </div>
               <div v-if="t.note && t.note.trim()" class="txn-note" :title="t.note">
                 <span ><HighlightText :text="t.note" :keyword="fieldOn('note') ? keyword : ''" /></span>
@@ -902,20 +859,6 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
               <div class="detail-kv">
                 <span class="k">日期</span>
                 <span class="v num">{{ isoDate(selectedTxn) }}</span>
-              </div>
-              <div class="detail-kv">
-                <span class="k">标签</span>
-                <span class="v">
-                  <template v-if="selectedTxn.tags.length">
-                    <span
-                      v-for="tag in selectedTxn.tags"
-                      :key="tag.id"
-                      class="tag-inline"
-
-                    ><HighlightText :text="tag.name" :keyword="fieldOn('tag') ? keyword : ''" /></span>
-                  </template>
-                  <span v-else class="faint">无</span>
-                </span>
               </div>
 
               <div v-if="selectedTxn.note && selectedTxn.note.trim()" style="margin-top: 12px">

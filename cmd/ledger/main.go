@@ -24,14 +24,14 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return fmt.Errorf("用法：ledger init|serve|check|backup|restore --db <路径> [--out <备份路径>] [--from <恢复来源>]")
+		return fmt.Errorf("用法：ledger init|serve|check|backup|restore|migrate --db <路径> [--out <备份路径>] [--from <来源>]")
 	}
 	command := os.Args[1]
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
 	dbPath := flags.String("db", env("LEDGER_DB", "var/ledger.sqlite"), "SQLite 数据库路径")
 	addr := flags.String("addr", env("LEDGER_ADDR", "127.0.0.1:8080"), "HTTP 监听地址")
 	output := flags.String("out", "", "备份目标（必须不存在）")
-	source := flags.String("from", "", "恢复来源；--db 为新的目标路径")
+	source := flags.String("from", "", "恢复或升级来源；--db 为新的目标路径")
 	if err := flags.Parse(os.Args[2:]); err != nil {
 		return err
 	}
@@ -42,6 +42,11 @@ func run() error {
 	switch command {
 	case "check":
 		return ledger.CheckFile(ctx, *dbPath)
+	case "migrate":
+		if *source == "" {
+			return fmt.Errorf("migrate 必须指定 --from，且 --db 必须为新的目标路径")
+		}
+		return ledger.Migrate(ctx, *source, *dbPath)
 	case "restore":
 		if *source == "" {
 			return fmt.Errorf("restore 必须指定 --from")

@@ -417,7 +417,7 @@ svg { display: block; }
 
 /* helper */
 .mono-lg { font-family: var(--font-mono); font-weight: 700; }
-.tag-inline { font-size: var(--fs-xs); background: var(--surface-2); border-radius: var(--r-sm); padding: 2px 7px; color: var(--fg-2); font-weight: 600; }
+.share-badge { font-size: var(--fs-xs); background: var(--surface-2); border-radius: var(--r-sm); padding: 2px 7px; color: var(--fg-2); font-weight: 600; }
 
 /* ============================================================
    8. 手机 / 窄屏响应式外壳（响应式布局）

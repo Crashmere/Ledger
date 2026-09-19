@@ -4,13 +4,11 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
   accountService,
   categoryService,
-  tagService,
   statsService, emptySummary,
   format,
   type Account,
   type Category,
   type Id,
-  type Tag,
   type TxnType,
   type TransactionFilter, type CategoryTotal, type DailyResult,
 
@@ -35,7 +33,6 @@ const RANGE_TABS: ReadonlyArray<{ v: RangeMode; label: string }> = [
 const selectedTypes = ref<TxnType[]>([]); // 仅 income/expense 可选
 const selectedAccountIds = ref<Id[]>([]);
 const selectedCategoryNames = ref<string[]>([]); // 展示层按名去重
-const selectedTagIds = ref<Id[]>([]);
 const amountMinCents = ref<number | null>(null);
 const amountMaxCents = ref<number | null>(null);
 
@@ -43,7 +40,6 @@ const pieDir = ref<Extract<TxnType, 'income' | 'expense'>>('expense');
 
 const accounts = ref<Account[]>([]);
 const allCategories = ref<Category[]>([]);
-const tags = ref<Tag[]>([]);
 
 const uniqueCategoryNames = computed<string[]>(() => {
   const seen = new Set<string>();
@@ -58,10 +54,9 @@ const uniqueCategoryNames = computed<string[]>(() => {
 });
 
 async function loadStatic(): Promise<void> {
-  const [result, cats, tagList] = await Promise.all([accountService.list(), categoryService.list(), tagService.list()]);
+  const [result, cats] = await Promise.all([accountService.list(), categoryService.list()]);
   accounts.value = result.items;
   allCategories.value = cats;
-  tags.value = tagList;
 }
 const loading = ref(false);
 const initializing = ref(true);
@@ -87,7 +82,6 @@ const activeQuery = computed<TransactionFilter>(() => {
   if (selectedAccountIds.value.length > 0) q.accountIds = [...selectedAccountIds.value];
   const catIds = categoryIdsForNames(selectedCategoryNames.value);
   if (catIds.length > 0) q.categoryIds = catIds;
-  if (selectedTagIds.value.length > 0) q.tagIds = [...selectedTagIds.value];
   if (amountMinCents.value !== null) q.amountMin = amountMinCents.value;
   if (amountMaxCents.value !== null) q.amountMax = amountMaxCents.value;
   return q;
@@ -219,11 +213,8 @@ function typeLabel(t: TxnType): string {
 function accountName(id: Id): string {
   return accounts.value.find((a) => a.id === id)?.name ?? '';
 }
-function tagName(id: Id): string {
-  return tags.value.find((t) => t.id === id)?.name ?? '';
-}
 
-type AddDim = 'type' | 'account' | 'category' | 'tag' | 'amount';
+type AddDim = 'type' | 'account' | 'category' | 'amount';
 const addOpen = ref(false);
 const addDim = ref<AddDim | null>(null);
 const amountMinInput = ref<string>('');
@@ -253,11 +244,6 @@ function toggleCategoryName(name: string): void {
   if (i >= 0) selectedCategoryNames.value.splice(i, 1);
   else selectedCategoryNames.value.push(name);
 }
-function toggleTag(id: Id): void {
-  const i = selectedTagIds.value.indexOf(id);
-  if (i >= 0) selectedTagIds.value.splice(i, 1);
-  else selectedTagIds.value.push(id);
-}
 function applyAmount(): void {
   const min = amountMinInput.value.trim();
   const max = amountMaxInput.value.trim();
@@ -284,14 +270,12 @@ const hasAnyFilter = computed(
     selectedTypes.value.length > 0 ||
     selectedAccountIds.value.length > 0 ||
     selectedCategoryNames.value.length > 0 ||
-    selectedTagIds.value.length > 0 ||
     hasAmountChip.value,
 );
 function clearAll(): void {
   selectedTypes.value = [];
   selectedAccountIds.value = [];
   selectedCategoryNames.value = [];
-  selectedTagIds.value = [];
   clearAmount();
 }
 usePageRefresh(() => { void initialize(); });
@@ -345,10 +329,6 @@ usePageRefresh(() => { void initialize(); });
             分类：{{ name }}
             <span class="x" role="button" tabindex="0" aria-label="删除条件" @click="toggleCategoryName(name)" @keydown.enter.prevent="toggleCategoryName(name)" @keydown.space.prevent="toggleCategoryName(name)">×</span>
           </span>
-          <span v-for="id in selectedTagIds" :key="'tg-' + id" class="chip chip-on">
-            标签：{{ tagName(id) }}
-            <span class="x" role="button" tabindex="0" aria-label="删除条件" @click="toggleTag(id)" @keydown.enter.prevent="toggleTag(id)" @keydown.space.prevent="toggleTag(id)">×</span>
-          </span>
           <span v-if="hasAmountChip" class="chip chip-on">
             金额：{{ amountChipLabel }}
             <span class="x" role="button" tabindex="0" aria-label="删除条件" @click="clearAmount()" @keydown.enter.prevent="clearAmount()" @keydown.space.prevent="clearAmount()">×</span>
@@ -370,7 +350,6 @@ usePageRefresh(() => { void initialize(); });
                 <button class="add-item" @click="addDim = 'type'">类型</button>
                 <button class="add-item" @click="addDim = 'account'">账户</button>
                 <button class="add-item" @click="addDim = 'category'">分类</button>
-                <button class="add-item" @click="addDim = 'tag'">标签</button>
                 <button class="add-item" @click="addDim = 'amount'">金额范围</button>
               </template>
 
@@ -419,18 +398,6 @@ usePageRefresh(() => { void initialize(); });
                   </button>
                 </template>
 
-                <template v-else-if="addDim === 'tag'">
-                  <div v-if="tags.length === 0" class="add-empty">暂无标签</div>
-                  <button
-                    v-for="tg in tags"
-                    :key="tg.id"
-                    class="add-opt"
-                    :class="{ sel: selectedTagIds.includes(tg.id) }"
-                    @click="toggleTag(tg.id)"
-                  >
-                    {{ tg.name }}
-                  </button>
-                </template>
 
                 <template v-else-if="addDim === 'amount'">
                   <div class="add-amount">
@@ -533,7 +500,7 @@ usePageRefresh(() => { void initialize(); });
                     <span class="lg-dot" :style="{ background: colorByName.get(row.name) }"></span>
                     <span class="category-name" :title="row.name">{{ row.name }}</span>
                   </span>
-                  <span class="rank-amount num muted">{{ fmtMoney(row.amount) }} · <b class="tag-inline">{{ pct(row.amount) }}%</b></span>
+                  <span class="rank-amount num muted">{{ fmtMoney(row.amount) }} · <b class="share-badge">{{ pct(row.amount) }}%</b></span>
                 </div>
                 <div class="bar-track">
                   <div class="bar-fill" :style="{ width: barWidth(row.amount), background: colorByName.get(row.name) }"></div>

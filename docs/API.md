@@ -27,16 +27,12 @@ VALIDATION=400、NOT_FOUND=404、RESTRICT=409、ORIGIN=403、INTERNAL=500。未�
 | PUT /categories/:id | {name,color}，不能更换所属账户 |
 | DELETE /categories/:id | 解除有效交易引用并标记删除 |
 | POST /accounts/:id/categories/reorder | {ids: [...]}，包含该账户全部有效分类 |
-| GET /tags | Tag[] |
-| POST /tags | {name,color} |
-| PUT /tags/:id | {name,color} |
-| DELETE /tags/:id | 标记删除，正常交易读取不再返回该标签 |
-| GET /transactions/:id | 含 tags、date 的完整交易 |
+| GET /transactions/:id | 含 date 的完整交易 |
 | POST /transactions | 完整 TransactionInput |
 | PUT /transactions/:id | 完整 TransactionInput |
 | DELETE /transactions/:id | 标记删除 |
 
-删除和排序返回 {ok:true}。账户、分类、标签 ID 由服务器生成。AccountInput：
+删除和排序返回 {ok:true}。账户、分类 ID 由服务器生成。AccountInput：
 
 ```json
 {"name":"现金","color":-1,"initialBalance":10000,"includeInBalance":true,"kind":"normal","periodStart":null,"periodEnd":null,"archived":false}
@@ -47,10 +43,12 @@ kind 为 normal/project；periodStart/periodEnd 输入是日期，账户响应�
 TransactionInput：
 
 ```json
-{"type":"expense","amount":1230,"accountId":"账户ID","toAccountId":null,"categoryId":null,"date":"2026-09-15","title":"午餐","note":null,"tagIds":[]}
+{"type":"expense","amount":1230,"accountId":"账户ID","toAccountId":null,"categoryId":null,"date":"2026-09-15","title":"午餐","note":null}
 ```
 
 type 为 income/expense/transfer。转账必须有不同的转入账户，categoryId 必须为 null；普通收支的 toAccountId 为 null。金额必须为正整数，最多 9007199254740991 分。新交易取北京零点；编辑日期没变时保留历史时间。
+
+交易响应使用 Transaction，不包含 tags。标签资源已移除，/tags 及其子路径返回 404；交易表单和筛选中的 tagIds 按未知字段返回 400，searchFields 中的 tag 也返回 400。升级后旧页面须重新加载以使用当前契约。
 
 ## 共享筛选
 
@@ -62,10 +60,9 @@ TransactionFilter 可被列表和三个统计接口复用；不同维度取交�
 | types | 收入/支出/转账数组 |
 | accountIds | 任一端账户命中 |
 | categoryIds | 分类 ID，跨账户同名分类可一起提交 |
-| tagIds | 命中任一有效标签，单笔只计一次 |
 | amountMin/amountMax | 含上下界，单位分 |
 | keyword | 去首尾空白，Unicode 不区分大小写的字面子串；% 和 _ 无特殊含义 |
-| searchFields | title/note/category/tag；有关键词时必须选 1–4 项 |
+| searchFields | title/note/category；有关键词时必须选 1–3 项 |
 | excludedIds | 从列表及所有统计排除，最多 500 个 |
 | projectScope | all（默认）；exclude 排除任一端涉及专项；selected 只放开明确选中的专项相关交易 |
 

@@ -39,7 +39,6 @@ func New(store *ledger.Store, assets fs.FS) http.Handler {
 		v, e := store.Categories(r.Context(), r.URL.Query().Get("accountId"))
 		reply(w, v, e)
 	})
-	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) { v, e := store.Tags(r.Context()); reply(w, v, e) })
 	mux.HandleFunc("GET /api/transactions/{id}", func(w http.ResponseWriter, r *http.Request) {
 		v, e := store.Transaction(r.Context(), r.PathValue("id"))
 		reply(w, v, e)
@@ -114,8 +113,6 @@ func New(store *ledger.Store, assets fs.FS) http.Handler {
 	mux.HandleFunc("PUT /api/accounts/{id}", s.saveAccount)
 	mux.HandleFunc("POST /api/categories", s.saveCategory)
 	mux.HandleFunc("PUT /api/categories/{id}", s.saveCategory)
-	mux.HandleFunc("POST /api/tags", s.saveTag)
-	mux.HandleFunc("PUT /api/tags/{id}", s.saveTag)
 	mux.HandleFunc("POST /api/transactions", s.saveTransaction)
 	mux.HandleFunc("PUT /api/transactions/{id}", s.saveTransaction)
 	mux.HandleFunc("DELETE /api/accounts/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -123,9 +120,6 @@ func New(store *ledger.Store, assets fs.FS) http.Handler {
 	})
 	mux.HandleFunc("DELETE /api/categories/{id}", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, map[string]bool{"ok": true}, store.DeleteCategory(r.Context(), r.PathValue("id")))
-	})
-	mux.HandleFunc("DELETE /api/tags/{id}", func(w http.ResponseWriter, r *http.Request) {
-		reply(w, map[string]bool{"ok": true}, store.DeleteTag(r.Context(), r.PathValue("id")))
 	})
 	mux.HandleFunc("DELETE /api/transactions/{id}", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, map[string]bool{"ok": true}, store.DeleteTransaction(r.Context(), r.PathValue("id")))
@@ -149,14 +143,6 @@ func (s *Server) saveCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v, e := s.store.SaveCategory(r.Context(), r.PathValue("id"), input)
-	reply(w, v, e)
-}
-func (s *Server) saveTag(w http.ResponseWriter, r *http.Request) {
-	var input ledger.NamedInput
-	if !decode(w, r, &input) {
-		return
-	}
-	v, e := s.store.SaveTag(r.Context(), r.PathValue("id"), input)
 	reply(w, v, e)
 }
 func (s *Server) saveTransaction(w http.ResponseWriter, r *http.Request) {
@@ -199,10 +185,8 @@ func decode(w http.ResponseWriter, r *http.Request, dest any) bool {
 		if r.Method == "POST" {
 			required = append(required, "accountId")
 		}
-	case *ledger.NamedInput:
-		required = []string{"name", "color"}
 	case *ledger.TransactionInput:
-		required = []string{"type", "amount", "accountId", "toAccountId", "categoryId", "date", "title", "note", "tagIds"}
+		required = []string{"type", "amount", "accountId", "toAccountId", "categoryId", "date", "title", "note"}
 	}
 	for _, field := range required {
 		value, exists := fields[field]

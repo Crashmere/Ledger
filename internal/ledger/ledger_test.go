@@ -47,15 +47,11 @@ func TestBalancesTransfersAndDeletion(t *testing.T) {
 	s := testStore(t)
 	a := account(t, s, "现金", "normal", 10000)
 	b := account(t, s, "银行卡", "normal", 2000)
-	c, e := s.SaveCategory(testContext, "", CategoryInput{NamedInput: NamedInput{Name: "餐饮", Color: -1}, AccountID: a.ID})
+	c, e := s.SaveCategory(testContext, "", CategoryInput{Name: "餐饮", Color: -1, AccountID: a.ID})
 	if e != nil {
 		t.Fatal(e)
 	}
-	g, e := s.SaveTag(testContext, "", NamedInput{Name: "工作日", Color: -1})
-	if e != nil {
-		t.Fatal(e)
-	}
-	expense := transaction(t, s, TransactionInput{Type: "expense", Amount: 1200, AccountID: a.ID, CategoryID: &c.ID, Date: "2026-09-01", TagIDs: []string{g.ID, g.ID}})
+	expense := transaction(t, s, TransactionInput{Type: "expense", Amount: 1200, AccountID: a.ID, CategoryID: &c.ID, Date: "2026-09-01"})
 	transaction(t, s, TransactionInput{Type: "income", Amount: 5000, AccountID: b.ID, Date: "2026-09-02"})
 	transaction(t, s, TransactionInput{Type: "transfer", Amount: 3000, AccountID: b.ID, ToAccountID: &a.ID, Date: "2026-09-03"})
 	accounts, e := s.Accounts(testContext)
@@ -81,15 +77,8 @@ func TestBalancesTransfersAndDeletion(t *testing.T) {
 		t.Fatal(e)
 	}
 	value, e := s.Transaction(testContext, expense.ID)
-	if e != nil || value.CategoryID != nil || len(value.Tags) != 1 {
+	if e != nil || value.CategoryID != nil {
 		t.Fatalf("category detach: %+v %v", value, e)
-	}
-	if e = s.DeleteTag(testContext, g.ID); e != nil {
-		t.Fatal(e)
-	}
-	value, e = s.Transaction(testContext, expense.ID)
-	if e != nil || len(value.Tags) != 0 {
-		t.Fatal("deleted tag still visible", e)
 	}
 	if e = s.DeleteTransaction(testContext, expense.ID); e != nil {
 		t.Fatal(e)
@@ -100,7 +89,7 @@ func TestBalancesTransfersAndDeletion(t *testing.T) {
 func TestPaginationUsesCompleteFilterForTotals(t *testing.T) {
 	s := testStore(t)
 	a := account(t, s, "日常", "normal", 0)
-	c, e := s.SaveCategory(testContext, "", CategoryInput{NamedInput: NamedInput{Name: "餐饮", Color: -1}, AccountID: a.ID})
+	c, e := s.SaveCategory(testContext, "", CategoryInput{Name: "餐饮", Color: -1, AccountID: a.ID})
 	if e != nil {
 		t.Fatal(e)
 	}

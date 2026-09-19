@@ -13,23 +13,22 @@ export interface AccountInput {
   name: string; color: number; initialBalance: Cents; includeInBalance: boolean;
   kind: AccountKind; periodStart: string | null; periodEnd: string | null; archived: boolean;
 }
-export interface Tag {
-  id: Id; name: string; color: number; icon: string | null; orderNum: number; createdAt: number;
+export interface Category {
+  id: Id; accountId: Id; name: string; color: number; icon: string | null; orderNum: number; createdAt: number;
 }
-export interface Category extends Tag { accountId: Id }
-export interface TxnWithTags {
+export interface Transaction {
   id: Id; type: TxnType; amount: Cents; accountId: Id; toAccountId: Id | null;
   categoryId: Id | null; time: number; date: string; title: string | null; note: string | null;
-  createdAt: number; updatedAt: number; tags: Tag[];
+  createdAt: number; updatedAt: number;
 }
 export interface TransactionInput {
   type: TxnType; amount: Cents; accountId: Id; toAccountId: Id | null;
-  categoryId: Id | null; date: string; title: string | null; note: string | null; tagIds: Id[];
+  categoryId: Id | null; date: string; title: string | null; note: string | null;
 }
 export interface TransactionFilter {
   dateFrom?: string; dateTo?: string; types?: TxnType[]; accountIds?: Id[];
-  categoryIds?: Id[]; tagIds?: Id[]; amountMin?: Cents; amountMax?: Cents;
-  keyword?: string; searchFields?: ('title' | 'note' | 'category' | 'tag')[];
+  categoryIds?: Id[]; amountMin?: Cents; amountMax?: Cents;
+  keyword?: string; searchFields?: ('title' | 'note' | 'category')[];
   excludedIds?: Id[]; projectScope?: 'all' | 'exclude' | 'selected';
 }
 export interface TransactionQuery {
@@ -38,7 +37,7 @@ export interface TransactionQuery {
 }
 export interface DayTotal { income: Cents; expense: Cents; count: number }
 export interface TransactionPage {
-  items: TxnWithTags[]; page: number; pageSize: number; totalCount: number;
+  items: Transaction[]; page: number; pageSize: number; totalCount: number;
   dayTotals?: Record<string, DayTotal>;
 }
 export interface Summary {

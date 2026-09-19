@@ -42,21 +42,10 @@ type Category struct {
 	OrderNum  float64 `json:"orderNum"`
 	CreatedAt int64   `json:"createdAt"`
 }
-type Tag struct {
-	ID        string  `json:"id"`
-	Name      string  `json:"name"`
-	Color     int64   `json:"color"`
-	Icon      *string `json:"icon"`
-	OrderNum  float64 `json:"orderNum"`
-	CreatedAt int64   `json:"createdAt"`
-}
-type NamedInput struct {
-	Name  string `json:"name"`
-	Color int64  `json:"color"`
-}
 type CategoryInput struct {
-	NamedInput
 	AccountID string `json:"accountId"`
+	Name      string `json:"name"`
+	Color     int64  `json:"color"`
 }
 type Transaction struct {
 	ID          string  `json:"id"`
@@ -71,18 +60,16 @@ type Transaction struct {
 	Note        *string `json:"note"`
 	CreatedAt   int64   `json:"createdAt"`
 	UpdatedAt   int64   `json:"updatedAt"`
-	Tags        []Tag   `json:"tags"`
 }
 type TransactionInput struct {
-	Type        string   `json:"type"`
-	Amount      int64    `json:"amount"`
-	AccountID   string   `json:"accountId"`
-	ToAccountID *string  `json:"toAccountId"`
-	CategoryID  *string  `json:"categoryId"`
-	Date        string   `json:"date"`
-	Title       *string  `json:"title"`
-	Note        *string  `json:"note"`
-	TagIDs      []string `json:"tagIds"`
+	Type        string  `json:"type"`
+	Amount      int64   `json:"amount"`
+	AccountID   string  `json:"accountId"`
+	ToAccountID *string `json:"toAccountId"`
+	CategoryID  *string `json:"categoryId"`
+	Date        string  `json:"date"`
+	Title       *string `json:"title"`
+	Note        *string `json:"note"`
 }
 
 // TransactionFilter 不包含分页：列表、汇总和图表必须共享同一完整匹配集。
@@ -92,7 +79,6 @@ type TransactionFilter struct {
 	Types        []string `json:"types,omitempty"`
 	AccountIDs   []string `json:"accountIds,omitempty"`
 	CategoryIDs  []string `json:"categoryIds,omitempty"`
-	TagIDs       []string `json:"tagIds,omitempty"`
 	AmountMin    *int64   `json:"amountMin,omitempty"`
 	AmountMax    *int64   `json:"amountMax,omitempty"`
 	Keyword      string   `json:"keyword,omitempty"`

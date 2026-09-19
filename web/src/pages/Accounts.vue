@@ -6,7 +6,6 @@ import { useRoute, useRouter } from 'vue-router';
 import {
   accountService,
   categoryService,
-  tagService,
   txnService, statsService, emptySummary, type DayTotal, type CategoryTotal,
   yuanToCents,
   centsToYuan,
@@ -14,8 +13,7 @@ import {
   AppError,
   type Account,
   type Category,
-  type Tag,
-  type TxnWithTags,
+  type Transaction,
   type Id,
 } from '../api';
 
@@ -25,13 +23,6 @@ import PageSkeleton from '../components/PageSkeleton.vue';
 import { groupDays, type DayGroup } from '../services/groupDays';
 import { beijingDate } from '../services/dates';
 const { enabled: projectMonthEnabled, setEnabled: setProjectMonthEnabled } = useProjectMonthFilter();
-const tab = ref<'accounts' | 'tags'>('accounts');
-const headerMedia = window.matchMedia('(max-width: 720px)');
-const compactHeader = ref(headerMedia.matches);
-function onHeaderChange(event: MediaQueryListEvent): void {
-  compactHeader.value = event.matches;
-}
-
 const router = useRouter();
 const route = useRoute();
 let disposed = false;
@@ -52,14 +43,13 @@ const accounts = ref<Account[]>([]);
 const balanceById = ref<Map<Id, number>>(new Map());
 const categoriesByAccount = ref<Map<Id, Category[]>>(new Map());
 const categoryById = ref<Map<Id, Category>>(new Map());
-const tags = ref<Tag[]>([]);
 
 const selectedAccountId = ref<Id | null>(null);
 const selectedCategories = ref<Category[]>([]); // 右栏分类网格（可拖拽重排）
-const accountTxns = ref<TxnWithTags[]>([]); // 当前页明细；流量与分类小计由后端单独计算
+const accountTxns = ref<Transaction[]>([]); // 当前页明细；流量与分类小计由后端单独计算
 const categoryFilterId = ref<Id | null>(null); // 明细按分类筛选（null = 全部）；点分类网格切换
 
-type Modal = { kind: 'account' | 'category' | 'tag'; mode: 'create' | 'edit'; id?: Id } | null;
+type Modal = { kind: 'account' | 'category'; mode: 'create' | 'edit'; id?: Id } | null;
 const modal = ref<Modal>(null);
 const saving = ref(false);
 
@@ -135,9 +125,7 @@ const modalTitle = computed(() => {
       ? fKind.value === 'project'
         ? '专项账户'
         : '账户'
-      : m.kind === 'category'
-        ? '分类'
-        : '标签';
+      : '分类';
   return `${m.mode === 'create' ? '新建' : '编辑'}${noun}`;
 });
 
@@ -206,7 +194,7 @@ async function initialize(readRoute = false): Promise<void> {
   error.value = '';
   const qCat = readRoute ? route.query.cat : undefined;
   try {
-    await Promise.all([reloadAccounts(), reloadTags()]);
+    await reloadAccounts();
     if (disposed) return;
     if (typeof qCat === 'string' && selectedAccountId.value) {
       const cats = categoriesByAccount.value.get(selectedAccountId.value) ?? [];
@@ -219,9 +207,6 @@ async function initialize(readRoute = false): Promise<void> {
   finally { initializing.value = false; refreshing = false; }
 }
 
-async function reloadTags(): Promise<void> {
-  tags.value = await tagService.list();
-}
 
 async function selectAccount(id: Id): Promise<void> {
   selectedAccountId.value = id;
@@ -238,7 +223,6 @@ function toggleCategoryFilter(catId: Id): void {
 
 onMounted(async () => {
   window.addEventListener('keydown', onGlobalKeydown);
-  headerMedia.addEventListener('change', onHeaderChange);
   const qAccount = route.query.account;
   if (typeof qAccount === 'string' && qAccount) selectedAccountId.value = qAccount;
 
@@ -248,7 +232,6 @@ onMounted(async () => {
 onUnmounted(() => {
   disposed = true;
   detailRequest++;
-  headerMedia.removeEventListener('change', onHeaderChange);
   window.removeEventListener('keydown', onGlobalKeydown);
 });
 
@@ -341,18 +324,6 @@ function openCategoryEdit(cat: Category): void {
   fColor.value = cat.color;
   modal.value = { kind: 'category', mode: 'edit', id: cat.id };
 }
-function openTagCreate(): void {
-  fName.value = '';
-  randomColor.value = makeRandomColor();
-  fColor.value = randomColor.value; // 默认选中随机色
-  modal.value = { kind: 'tag', mode: 'create' };
-}
-function openTagEdit(t: Tag): void {
-  fName.value = t.name;
-  randomColor.value = makeRandomColor();
-  fColor.value = t.color;
-  modal.value = { kind: 'tag', mode: 'edit', id: t.id };
-}
 function closeModal(): void {
   modal.value = null;
 }
@@ -410,16 +381,6 @@ async function saveModal(): Promise<void> {
       await reloadAccounts(); // 刷新分类计数/映射
       page.value = 1;
       await reloadDetail();
-    } else {
-      if (m.mode === 'create') {
-        await tagService.create({ name, color: fColor.value });
-      } else {
-        await tagService.update(m.id!, { name, color: fColor.value });
-      }
-      saved = true;
-      await reloadTags();
-      page.value = 1;
-      await reloadDetail(); // 明细里的标签名可能变化
     }
     closeModal();
     syncQuery();
@@ -474,28 +435,6 @@ function deleteCategory(cat: Category): void {
         page.value = 1;
         await reloadDetail();
         showFeedback('success', '分类已删除，相关交易保留');
-      } catch (e) {
-        if (deleted) { showFeedback('error', '已删除，但刷新失败，请重新加载页面。'); return; }
-        showFeedback('error', e instanceof AppError ? e.message : '删除失败，请重试');
-      }
-    },
-  };
-}
-
-function deleteTag(t: Tag): void {
-  confirmState.value = {
-    title: '删除标签',
-    message: '删除后，该标签会从所有交易上移除，但交易本身保留。确定删除吗？',
-    confirmText: '删除标签',
-    onConfirm: async () => {
-      let deleted = false;
-      try {
-        await tagService.remove(t.id);
-        deleted = true;
-        await reloadTags();
-        page.value = 1;
-        await reloadDetail();
-        showFeedback('success', '标签已删除，相关交易保留');
       } catch (e) {
         if (deleted) { showFeedback('error', '已删除，但刷新失败，请重新加载页面。'); return; }
         showFeedback('error', e instanceof AppError ? e.message : '删除失败，请重试');
@@ -591,7 +530,6 @@ function collectUsedHues(): number[] {
   const argbList: number[] = COLOR_PRESETS.map(hexToArgb);
   for (const a of accounts.value) argbList.push(a.color);
   for (const c of categoryById.value.values()) argbList.push(c.color);
-  for (const t of tags.value) argbList.push(t.color);
   const hues: number[] = [];
   for (const argb of argbList) {
     const [r, g, b] = argbToRgb(argb);
@@ -653,7 +591,7 @@ function daySummaryText(g: DayGroup): string {
   return `支出 ${format(g.expense)} · 收入 ${format(g.income)}`;
 }
 
-function txnColor(t: TxnWithTags): string {
+function txnColor(t: Transaction): string {
   if (t.type === 'transfer') return 'var(--transfer)';
   if (t.categoryId) {
     const cat = categoryById.value.get(t.categoryId);
@@ -662,7 +600,7 @@ function txnColor(t: TxnWithTags): string {
   const acc = accounts.value.find((a) => a.id === t.accountId);
   return acc ? argbToCss(acc.color) : 'var(--fg-3)';
 }
-function txnTitle(t: TxnWithTags): string {
+function txnTitle(t: Transaction): string {
   if (t.title && t.title.trim()) return t.title;
   const cat = categoryName(t.categoryId);
   if (cat) return cat;
@@ -670,19 +608,19 @@ function txnTitle(t: TxnWithTags): string {
   return '(无标题)';
 }
 
-function txnSub(t: TxnWithTags): string {
+function txnSub(t: Transaction): string {
   if (t.type === 'transfer') {
     return `${accountName(t.accountId)} → ${accountName(t.toAccountId)}`;
   }
   const cat = categoryName(t.categoryId);
   return cat ? `${accountName(t.accountId)} · ${cat}` : `${accountName(t.accountId)} · 未分类`;
 }
-function txnAmountText(t: TxnWithTags): string {
+function txnAmountText(t: Transaction): string {
   if (t.type === 'expense') return `−${format(t.amount)}`;
   if (t.type === 'income') return `+${format(t.amount)}`;
   return format(t.amount); // transfer：中性、无正负号
 }
-function txnAmountClass(t: TxnWithTags): string {
+function txnAmountClass(t: Transaction): string {
   if (t.type === 'expense') return 'neg';
   if (t.type === 'income') return 'pos';
   return 'tr';
@@ -695,15 +633,9 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
     <PageSkeleton v-if="initializing" label="账户" />
     <template v-else>
     <LoadError :message="error" @retry="initialize" />
-    <Teleport to="#topbar-slot" :disabled="compactHeader">
-      <div class="subtabs">
-        <button class="subtab" :class="{ on: tab === 'accounts' }" @click="tab = 'accounts'">账户</button>
-        <button class="subtab" :class="{ on: tab === 'tags' }" @click="tab = 'tags'">标签</button>
-      </div>
-    </Teleport>
 
 
-    <div v-if="tab === 'accounts'" class="two-col acc-two-col">
+    <div class="two-col acc-two-col">
 
       <div class="card acc-list-card">
         <div class="card-head">
@@ -930,10 +862,6 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
                   </div>
                   <div class="txn-sub">
                     {{ txnSub(t) }}
-                    <template v-if="t.tags.length">
-                      <span class="sep" />
-                      <span v-for="tag in t.tags" :key="tag.id" class="tag-inline">{{ tag.name }}</span>
-                    </template>
                   </div>
 
                   <div v-if="t.note && t.note.trim()" class="txn-note" :title="t.note">{{ t.note }}</div>
@@ -949,47 +877,6 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
 
       <div v-else class="card card-pad empty">
         <div style="font-weight: 700; color: var(--fg-2)">先在左侧新建一个账户</div>
-      </div>
-    </div>
-
-
-    <div v-else class="tags-wrap">
-      <div class="card">
-        <div class="card-head">
-          <h3>标签</h3>
-          <span class="faint" style="font-size: 13px">{{ tags.length }} 个 · 全局共用</span>
-        </div>
-        <div class="card-pad" style="padding-top: 8px">
-          <div v-for="t in tags" :key="t.id" class="txn tag-row">
-            <div class="ic-tile sm" :style="{ background: argbToCss(t.color) }">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M20.6 13.4 12 22l-8.6-8.6a2 2 0 0 1 0-2.8L11 3.4a2 2 0 0 1 1.4-.6H20a2 2 0 0 1 2 2v7.6a2 2 0 0 1-.6 1.4z" />
-                <circle cx="16.5" cy="7.5" r="1.2" />
-              </svg>
-            </div>
-            <div class="txn-main">
-              <div class="txn-title" style="font-size: 14px">{{ t.name }}</div>
-            </div>
-            <div class="cat-actions" style="opacity: 1">
-              <button class="icon-btn icon-btn-sm" aria-label="编辑标签" @click="openTagEdit(t)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
-              </button>
-              <button class="icon-btn icon-btn-sm danger" aria-label="删除标签" @click="deleteTag(t)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" /></svg>
-              </button>
-            </div>
-          </div>
-
-          <div v-if="tags.length === 0" class="empty" style="padding: 24px 12px">
-            <div style="font-weight: 700; color: var(--fg-2)">还没有标签</div>
-          </div>
-
-          <div class="divider" style="margin: 12px 0" />
-          <button class="btn btn-ghost btn-block" style="border-style: dashed; color: var(--fg-2)" @click="openTagCreate">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14" /></svg>
-            新建标签
-          </button>
-        </div>
       </div>
     </div>
 
@@ -1155,35 +1042,6 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
   text-overflow: ellipsis;
 }
 
-@media (max-width: 720px) {
-  .acc-content > .subtabs { margin-bottom: 16px; }
-}
-@media (min-width: 721px) and (max-width: 960px) {
-  .subtabs .subtab { padding-inline: 10px; }
-}
-.subtabs {
-  display: inline-flex;
-  gap: 4px;
-  background: var(--surface-2);
-  border-radius: var(--r-md);
-  padding: 4px;
-}
-.subtab {
-  padding: 6px 18px;
-  border-radius: 7px;
-  font-weight: 700;
-  color: var(--fg-2);
-  font-size: var(--fs-sm);
-}
-.subtab:hover {
-  color: var(--fg);
-}
-.subtab.on {
-  background: var(--surface);
-  color: var(--primary);
-  box-shadow: var(--sh-1);
-}
-
 /* 账户视图双栏：左固定 340px、右自适应，顶对齐。
    右轨道用 minmax(0, 1fr) 而非 1fr：1fr 的最小尺寸默认为 min-content，
    对 nowrap 的 .txn-note（超长备注）来说 min-content = 整段文字宽，会把轨道/整页撑爆、
@@ -1343,14 +1201,6 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* 标签视图 */
-.tags-wrap {
-  max-width: 560px;
-}
-.tag-row .cat-actions {
-  opacity: 1;
 }
 
 /* 弹层 */
@@ -1541,9 +1391,6 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
   .modal {
     width: calc(100vw - 32px);
     max-width: 440px;
-  }
-  .tags-wrap {
-    max-width: none;
   }
 
   /* cat-actions 桌面靠 hover 显现；触屏无 hover → 常显，保证可点（§4.4） */

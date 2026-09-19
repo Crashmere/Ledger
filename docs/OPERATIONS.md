@@ -2,7 +2,7 @@
 
 本文负责 Ledger 本身。先读 [文档入口](README.md)；共享主机、Nginx server 和跨项目规则见 `/opt/server-context/SKILL.md` 或 [server-operations 源](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/SKILL.md)。不要用本项目配置覆盖其他应用的共享入口。
 
-目录： [当前部署](#当前部署) · [只读查看](#只读查看) · [构建与首次安装](#构建与首次安装) · [备份](#备份) · [恢复](#恢复) · [程序和配置更新](#程序和配置更新) · [文档同步](#文档同步) · [排查](#排查)
+目录： [当前部署](#当前部署) · [只读查看](#只读查看) · [构建与首次安装](#构建与首次安装) · [备份](#备份) · [恢复](#恢复) · [程序和配置更新](#程序和配置更新) · [数据库升级](#数据库升级) · [文档同步](#文档同步) · [排查](#排查)
 
 ## 当前部署
 
@@ -169,8 +169,33 @@ sudo systemctl start ledger-backup.service
 - unit/env/location/备份或发布脚本改动先更新本仓库 deploy，再由管理员审阅、对照现场、安装到明确路径。
 - unit 改动需要 `systemctl daemon-reload`；env/程序启动参数变动需要受控重启 Ledger。
 - Nginx location 变更先 `nginx -t` 再 reload，并检查全部现有应用；不要重写共享 server。涉及全局模板时同时改 agent-config。
-- schema 变更需要升级/兼容/回退方案和测试。当前存储支持版本 1，不是通用自动迁移框架；不能仅把 SQL 文件放进去就假定旧库会安全升级。
+- 当前源码的运行版本为 schema 2；schema 1 需按下节显式升级。serve、check、backup 只接受版本 2，普通发布遇到旧库会在候选检查阶段失败并重启旧程序。
 - 手工回退仍需先备份、确认旧程序兼容当前 schema；数据库恢复始终走独立人工确认流程。
+
+## 数据库升级
+
+版本 2 完全移除标签：正式库不再包含 tag、txn_tag 及其索引。账户、分类、交易的全部字段和删除状态保留，金额、日期和余额不变。新建库直接使用 schema.sql；旧结构仅在升级工具和合成测试中保留。
+
+升级工具只生成新文件，不改来源，也不替换正式库：
+
+```sh
+./ledger-candidate migrate --from /path/to/version-1-backup.sqlite --db /path/to/new-version-2.sqlite
+./ledger-candidate check --db /path/to/new-version-2.sqlite
+```
+
+来源必须为完整的版本 1 数据库，目标必须不存在。工具用一致性快照复制，再在事务中删除两张标签表、更新 user_version，最后 VACUUM 并检查完整性和外键。失败时源库仍保留；目标可能不存在或留下待检查的副本，不用同一路径自动重试。restore 接受版本 1/2 并原样保留来源版本；新版 check 不接受旧备份，以避免发布把旧库误判为可运行。旧备份可用保留的旧程序检查，或通过 migrate 生成可供新版检查的副本。
+
+首次从版本 1 上线属于数据库与程序的协调切换，必须确认标签信息清除和 Ledger 短暂停服。历史备份不随升级清理。普通 CI 不执行升级，不能直接推送后期待自动成功；先准备经过测试的完整源码提交、Linux 产物及哈希，并在独立目录演练升级。
+
+管理员按实际唯一文件名准备切换命令，检查并持有与 deploy-release.sh 相同的 /run/lock/ledger-deploy.lock；阻止并发发布。维护期间不记账，操作范围仅 Ledger：
+
+1. 停止 ledger-backup.timer、ledger-backup.service 和 ledger.service。用当前旧程序以 ledger 身份生成 before-schema-upgrade 的一致性备份，保留旧程序和其 current-commit。
+2. 用候选程序以 ledger 身份从该备份生成新的版本 2 文件，并执行 check。核对账户、分类和交易全部字段，以及余额、收支统计；不向正式账本写入测试交易。任一步失败则保留现场并启动原服务与 timer，不切换。
+3. 将旧正式数据库和所有伴随 WAL/SHM 文件整体归档到新的私有目录。将已检查的版本 2 文件移到正式路径，保持 ledger:ledger/0600；不得让旧 WAL/SHM 与新库混用。通过独立的 bin/ledger.next 文件安装已核对哈希的候选程序，再原子重命名替换二进制。这里是受控 schema 切换，不通过普通发布脚本二次调用旧程序备份版本 2。
+4. 启动 Ledger，验证直连与代理健康、/ledger/search 和浏览器只读账目。成功后记录候选程序的源码提交到 current-commit，恢复备份 timer，使用新版备份工具生成首份版本 2 快照；同步本项目文档与 SOURCE。此后恢复普通 CI 发布。
+5. 若验收失败且尚未发生新写入，停止 Ledger，分别保留失败的版本 2 文件及其伴随文件，再恢复成对归档的旧库、旧程序和提交标记，启动原服务与 timer。已经发生新写入时先备份并确认恢复时点，不自动丢弃新账目。版本 1 程序不能直接运行版本 2 数据库。
+
+升级不会更改共享 Nginx、端口、权限方案或 FeeTable；共享服务器应用清单无需因本次 schema 调整而更新。
 
 ## 文档同步
 

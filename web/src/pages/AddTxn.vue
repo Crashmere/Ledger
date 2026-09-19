@@ -4,14 +4,12 @@ import { useRoute, useRouter } from 'vue-router';
 import {
   accountService,
   categoryService,
-  tagService,
   txnService,
   yuanToCents,
   centsToYuan,
   AppError,
   type Account,
   type Category,
-  type Tag,
   type TxnType,
   type Id,
 } from '../api';
@@ -44,20 +42,18 @@ const copyingId = computed<Id | null>(() => {
 
 const accounts = ref<Account[]>([]);
 const categories = ref<Category[]>([]);
-const tags = ref<Tag[]>([]);
 
 const type = ref<TxnType>('expense'); // 智能默认：支出
 const accountId = ref<Id | null>(null);
 const toAccountId = ref<Id | null>(null); // 仅转账
 const categoryId = ref<Id | null>(null); // 仅收支
 const dateStr = ref<string>(todayStr()); // 智能默认：今天
-const selectedTagIds = ref<Id[]>([]);
 const title = ref(''); // 标题：主要信息（如"晚饭"），选填
 const note = ref(''); // 备注：详细信息（如"和同事在楼下吃"），选填
 const raw = ref(''); // 手机直接输入金额；桌面允许计算器算式
 const justEvaluated = ref(false);
 
-const openPicker = ref<'account' | 'category' | 'toAccount' | 'date' | 'tag' | null>(null);
+const openPicker = ref<'account' | 'category' | 'toAccount' | 'date' | null>(null);
 const saving = ref(false);
 const saveError = ref('');
 const saveUncertain = ref(false);
@@ -84,9 +80,6 @@ const currentToAccount = computed(
   () => accounts.value.find((a) => a.id === toAccountId.value) ?? null,
 );
 const toAccountOptions = computed(() => accounts.value.filter((a) => a.id !== accountId.value));
-const selectedTags = computed(() =>
-  tags.value.filter((t) => selectedTagIds.value.includes(t.id)),
-);
 
 const displayValue = computed(() => {
   const r = raw.value;
@@ -264,11 +257,6 @@ function onDateInput(e: Event): void {
   openPicker.value = null;
 }
 
-function toggleTag(id: Id): void {
-  const idx = selectedTagIds.value.indexOf(id);
-  if (idx >= 0) selectedTagIds.value.splice(idx, 1);
-  else selectedTagIds.value.push(id);
-}
 
 function setType(t: TxnType): void {
   type.value = t;
@@ -328,7 +316,6 @@ async function save(): Promise<void> {
         date: dateStr.value,
         title: title.value.trim() || null,
         note: note.value.trim() || null,
-        tagIds: selectedTagIds.value.slice(),
       });
       showFeedback('success', '已保存 ✓');
       saved = true;
@@ -342,14 +329,12 @@ async function save(): Promise<void> {
         date: dateStr.value,
         title: title.value.trim() || null,
         note: note.value.trim() || null,
-        tagIds: selectedTagIds.value.slice(),
       });
       savePreference(LAST_ACCOUNT_KEY, accountId.value);
       raw.value = '';
       justEvaluated.value = false;
       title.value = '';
       note.value = '';
-      selectedTagIds.value = [];
       showFeedback('success', '已保存 ✓');
       saved = true;
     }
@@ -453,7 +438,6 @@ function resetFormState(): void {
   toAccountId.value = null;
   categoryId.value = null;
   dateStr.value = todayStr();
-  selectedTagIds.value = [];
   title.value = '';
   note.value = '';
   raw.value = '';
@@ -492,7 +476,6 @@ async function initEdit(id: Id): Promise<void> {
 
   title.value = txn.title ?? '';
   note.value = txn.note ?? '';
-  selectedTagIds.value = txn.tags.map((t) => t.id);
 
   await loadCategories();
   categoryId.value = txn.type === 'transfer' ? null : txn.categoryId;
@@ -508,7 +491,6 @@ async function initCopy(id: Id): Promise<void> {
   dateStr.value = todayStr(); // 复制的唯一差异：日期取今天
   title.value = txn.title ?? '';
   note.value = txn.note ?? '';
-  selectedTagIds.value = txn.tags.map((t) => t.id);
 
   await loadCategories();
   categoryId.value = txn.type === 'transfer' ? null : txn.categoryId;
@@ -519,12 +501,11 @@ async function initForm(): Promise<void> {
   initError.value = '';
   try {
     resetFormState();
-    const [result, categoriesResult, tagsResult] = await Promise.all([
-      accountService.list(), categoryService.list(), tagService.list(),
+    const [result, categoriesResult] = await Promise.all([
+      accountService.list(), categoryService.list(),
     ]);
     accounts.value = result.items;
     allCategories.value = categoriesResult;
-    tags.value = tagsResult;
     if (editingId.value) await initEdit(editingId.value);
     else if (copyingId.value) await initCopy(copyingId.value);
     else await initCreate();
@@ -748,8 +729,6 @@ onUnmounted(() => {
 
 
 
-        <div class="add-pair add-pair-date">
-
         <div class="field">
           <label class="field-label" :for="isMobile ? 'txn-date' : 'txn-date-button'">日期</label>
           <div class="date-row">
@@ -776,37 +755,6 @@ onUnmounted(() => {
             <button class="date-step" aria-label="后一天" @click="shiftDate(1)">›</button>
           </div>
         </div>
-
-
-        <div class="field">
-          <label class="field-label">标签</label>
-          <div class="picker-anchor">
-            <button class="pill pill-block" :class="{ 'pill-active': openPicker === 'tag' }" @click="toggle('tag')">
-              <template v-if="selectedTags.length">
-                <span v-for="t in selectedTags" :key="t.id" class="chip" style="padding: 2px 8px">{{ t.name }}</span>
-              </template>
-              <span v-else class="faint">添加标签</span>
-              <span style="color: var(--primary); font-weight: 700; margin-left: auto">＋</span>
-            </button>
-            <div v-if="openPicker === 'tag'" class="popover popover-pad">
-              <div v-if="tags.length === 0" class="popover-empty">暂无标签</div>
-              <div class="tag-wrap">
-                <button
-                  v-for="t in tags"
-                  :key="t.id"
-                  class="chip"
-                  :class="{ 'chip-on': selectedTagIds.includes(t.id) }"
-                  @click="toggleTag(t.id)"
-                >
-                  {{ t.name }}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-        </div>
-
-
 
         <div class="field">
           <label class="field-label" for="txn-note">备注</label>
@@ -872,7 +820,7 @@ onUnmounted(() => {
       <div class="confirm-card">
         <div class="confirm-title">删除交易</div>
         <div class="confirm-msg">
-          删除后这笔交易将不可恢复（其标签关联会一并移除，账户余额随之调整）。确定删除吗？
+          删除后这笔交易将不可恢复，账户余额随之调整。确定删除吗？
         </div>
         <div class="confirm-actions">
           <button class="btn btn-ghost" :disabled="deleting" @click="confirmingDelete = false">取消</button>
@@ -1061,11 +1009,6 @@ onUnmounted(() => {
   font-size: var(--fs-sm);
   text-align: center;
 }
-.tag-wrap {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
 
 /* 5 列数字键盘（工具列 + 3 列数字 + 运算符列），保持设计的行高与底片风格 */
 .numpad-5 {
@@ -1177,7 +1120,6 @@ onUnmounted(() => {
   .add-pair .field { min-width: 0; }
   .pill-block { min-height: 44px; flex-wrap: wrap; overflow-wrap: anywhere; }
   /* 日期独占一行，直接打开系统日期选择器，不再叠加网页浮层。 */
-  .add-pair-date { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .date-row {
     gap: 0; border: 1px solid var(--border-strong); border-radius: var(--r-md);
     background: var(--surface);

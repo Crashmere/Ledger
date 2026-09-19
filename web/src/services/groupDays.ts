@@ -1,8 +1,8 @@
-import type { TxnWithTags, DayTotal } from '../api/types';
+import type { Transaction, DayTotal } from '../api/types';
 import { dayLabel } from './dates';
-export interface DayGroup { key: string; label: string; expense: number; income: number; items: TxnWithTags[] }
+export interface DayGroup { key: string; label: string; expense: number; income: number; items: Transaction[] }
 // 只对当前页分组排版；日小计来自后端完整筛选集，跨页时不会少算。
-export function groupDays(items: TxnWithTags[], totals: Record<string, DayTotal>): DayGroup[] {
+export function groupDays(items: Transaction[], totals: Record<string, DayTotal>): DayGroup[] {
   const groups = new Map<string, DayGroup>();
   for (const txn of items) {
     let group = groups.get(txn.date);
