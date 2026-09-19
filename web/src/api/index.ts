@@ -23,6 +23,7 @@ export const categoryService = {
   reorder: (id: string, ids: string[]) => request('/accounts/' + idPath(id) + '/categories/reorder', 'POST', { ids }),
 };
 export const txnService = {
+  syncFabricWorld: (id: string) => request<{ fabricId: string; editUrl: string }>('/transactions/' + idPath(id) + '/fabricworld', 'POST', {}, { retrySafe: true }),
   get: (id: string) => request<Transaction>('/transactions/' + idPath(id)),
   query: (input: TransactionQuery) => request<TransactionPage>('/transactions/query', 'POST', input),
   create: (input: TransactionInput) => request<Transaction>('/transactions', 'POST', input),

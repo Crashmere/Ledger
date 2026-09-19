@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   accountService,
@@ -21,6 +21,7 @@ import { beijingDate, shiftDay } from '../services/dates';
 import LoadError from '../components/LoadError.vue';
 import PageSkeleton from '../components/PageSkeleton.vue';
 import SaveStatus from '../components/SaveStatus.vue';
+import FabricWorldSync from '../components/FabricWorldSync.vue';
 import { useSaveGuard } from '../composables/useSaveGuard';
 import { pushToast } from '../composables/useToast';
 import { readPreference, savePreference } from '../services/preferences';
@@ -58,7 +59,15 @@ const saving = ref(false);
 const saveError = ref('');
 const saveUncertain = ref(false);
 const showSaveError = ref(false);
-useSaveGuard(saving);
+const syncTransactionId = ref<Id | null>(null);
+useSaveGuard(computed(() => saving.value || syncTransactionId.value !== null));
+async function finishFabricSync(editUrl?: string): Promise<void> {
+  syncTransactionId.value = null;
+  if (editUrl) {
+    await nextTick();
+    window.location.assign(editUrl);
+  }
+}
 const deleting = ref(false);
 const confirmingDelete = ref(false); // 删除二次确认弹层
 const initializing = ref(true);
@@ -278,7 +287,7 @@ function showFeedback(kind: 'success' | 'error', msg: string): void {
 }
 
 async function save(): Promise<void> {
-  if (saving.value || deleting.value || initializing.value || initError.value || saveUncertain.value) return;
+  if (saving.value || syncTransactionId.value || deleting.value || initializing.value || initError.value || saveUncertain.value) return;
   const value = amountValue.value;
   if (value === null || value <= 0) {
     showFeedback('error', '请输入有效金额');
@@ -320,7 +329,7 @@ async function save(): Promise<void> {
       showFeedback('success', '已保存 ✓');
       saved = true;
     } else {
-      await txnService.create({
+      const transaction = await txnService.create({
         type: type.value,
         amount: yuanToCents(value),
         accountId: accountId.value,
@@ -331,6 +340,7 @@ async function save(): Promise<void> {
         note: note.value.trim() || null,
       });
       savePreference(LAST_ACCOUNT_KEY, accountId.value);
+      if (transaction.fabricWorldEligible) syncTransactionId.value = transaction.id;
       raw.value = '';
       justEvaluated.value = false;
       title.value = '';
@@ -390,7 +400,7 @@ function copyCurrent(): void {
 }
 
 function onKeydown(e: KeyboardEvent): void {
-  if (saving.value || showSaveError.value) return;
+  if (saving.value || syncTransactionId.value || showSaveError.value) return;
   // 手机使用原生输入与焦点行为，不接管 Tab、数字键或 Enter 保存。
   if (isMobile.value) return;
   const el = e.target as HTMLElement | null;
@@ -536,6 +546,7 @@ onUnmounted(() => {
 <template>
   <div class="content add-content">
     <PageSkeleton v-if="initializing" label="交易表单" form />
+    <FabricWorldSync v-if="syncTransactionId && !saving" :transaction-id="syncTransactionId" @finish="finishFabricSync" />
     <SaveStatus v-if="saving || showSaveError" :saving="saving" :error="saveError" :uncertain="saveUncertain"
       @dismiss="showSaveError = false" @review="router.push('/search')" />
     <template v-if="!initializing">

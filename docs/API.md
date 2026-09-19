@@ -12,6 +12,8 @@
 
 VALIDATION=400、NOT_FOUND=404、RESTRICT=409、ORIGIN=403、INTERNAL=500。未知字段、无效 JSON、超出 2MiB 的请求被拒绝。写请求要求完整表单字段；可空字段显式传 null。连接中断不能据此判断是否提交成功，客户端不自动重试写请求。
 
+交易响应包含只读 fabricWorldEligible：有效账户名为“副业”、有效所属分类名为“纺织”的 expense 为 true。POST /transactions/:id/fabricworld 仅接受满足条件的已有交易，由服务器读取字段并请求 FabricWorld；成功返回 fabricId 和同源 editUrl，失败返回 FABRICWORLD（502，上游不可用/失败；503，未配置）。此接口可手动安全重试，交易本身不会再次保存。批量保存响应额外包含 fabricWorldTransactions（目标交易数组，无目标时省略），预览不包含已保存交易。
+
 ## 资源
 
 | 方法与地址 | 输入 / 返回 |
@@ -29,6 +31,7 @@ VALIDATION=400、NOT_FOUND=404、RESTRICT=409、ORIGIN=403、INTERNAL=500。未�
 | POST /accounts/:id/categories/reorder | {ids: [...]}，包含该账户全部有效分类 |
 | GET /transactions/:id | 含 date 的完整交易 |
 | POST /transactions | 完整 TransactionInput |
+| POST /transactions/:id/fabricworld | 已保存的目标交易同步到 FabricWorld，返回 {fabricId,editUrl} |
 | PUT /transactions/:id | 完整 TransactionInput |
 | DELETE /transactions/:id | 标记删除 |
 

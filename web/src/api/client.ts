@@ -5,9 +5,9 @@ export class AppError extends Error {
 }
 
 // 写请求只发送一次；连接中断时无法判断服务器是否已经保存。
-export async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+export async function request<T>(path: string, method = 'GET', body?: unknown, options: { retrySafe?: boolean } = {}): Promise<T> {
   const readOnly = method === 'GET' || path.endsWith('/query') || path.includes('/statistics/') || path.endsWith('/preview');
-  if (!readOnly && connectionUnavailable.value) throw new AppError('NETWORK', '请先恢复连接并核对账目，再提交。');
+  if (!readOnly && !options.retrySafe && connectionUnavailable.value) throw new AppError('NETWORK', '请先恢复连接并核对账目，再提交。');
   let response: Response;
   try {
     response = await fetch(import.meta.env.BASE_URL + 'api' + path, {
@@ -17,7 +17,7 @@ export async function request<T>(path: string, method = 'GET', body?: unknown): 
       signal: AbortSignal.timeout(30_000),
     });
   } catch {
-    connectionUnavailable.value = true;
+    if (!options.retrySafe) connectionUnavailable.value = true;
     throw new AppError('NETWORK', readOnly
       ? '无法连接服务器，请检查网络后重试。'
       : '未收到服务器确认，请先查看账目核对结果，再决定是否重试。');

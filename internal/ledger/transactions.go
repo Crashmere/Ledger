@@ -8,7 +8,9 @@ import (
 )
 
 const transactionColumns = `t.id,t.type,t.amount,t.account_id,t.to_account_id,
- CASE WHEN c.is_delete=0 THEN t.category_id ELSE NULL END,t.time,t.title,t.note,t.created_at,t.updated_at`
+ CASE WHEN c.is_delete=0 THEN t.category_id ELSE NULL END,t.time,t.title,t.note,t.created_at,t.updated_at,
+ EXISTS(SELECT 1 FROM account a WHERE a.id=t.account_id AND a.is_delete=0 AND a.name='副业'
+ AND t.type='expense' AND c.is_delete=0 AND c.account_id=a.id AND c.name='纺织')`
 const transactionJoin = " FROM txn t LEFT JOIN category c ON c.id=t.category_id "
 
 func readTransactions(ctx context.Context, q querier, query string, args ...any) ([]Transaction, error) {
@@ -19,7 +21,7 @@ func readTransactions(ctx context.Context, q querier, query string, args ...any)
 	}
 	for rows.Next() {
 		var t Transaction
-		if err = rows.Scan(&t.ID, &t.Type, &t.Amount, &t.AccountID, &t.ToAccountID, &t.CategoryID, &t.Time, &t.Title, &t.Note, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		if err = rows.Scan(&t.ID, &t.Type, &t.Amount, &t.AccountID, &t.ToAccountID, &t.CategoryID, &t.Time, &t.Title, &t.Note, &t.CreatedAt, &t.UpdatedAt, &t.FabricWorldEligible); err != nil {
 			rows.Close()
 			return nil, err
 		}

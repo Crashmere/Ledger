@@ -160,6 +160,12 @@ sudo systemctl start ledger-backup.service
 
 ## 程序和配置更新
 
+### FabricWorld 联动
+
+Ledger 通过环境变量 LEDGER_FABRICWORLD_URL 调用 FabricWorld，未设置时默认 http://127.0.0.1:18082；deploy/ledger.env 记录同一默认值。显式设为空值并重启 Ledger 可暂停服务端同步（弹窗将提示未配置，账目仍能保存）。目标为 Go API 根地址（不带 /fabricworld 前缀）。两服务独立运行，无需数据库权限共享、额外端口或 Nginx 修改；页面跳转固定使用同源 /fabricworld/fabrics/:id/edit。
+
+首次启用先发布支持 /api/integrations/ledger 的 FabricWorld，再发布 Ledger。不改变 schema；复用现有 operations 表长期保留来源以避免重复。FabricWorld 不可用时只有同步失败，记账仍成功。若回退 FabricWorld，旧版每日清理会删除超过 7 天的联动操作记录，因此停止联动后才能长期运行旧版；普通健康失败的即时程序回退不会回滚数据。恢复 FabricWorld 到旧备份可能丢失之后的布料和同步来源，恢复前需协调核对。
+
 日常程序更新走 main → GitHub Actions，流程、权限、备份与自动回退见 [CICD.md](CICD.md)。写入生产之前通过合成测试。发布历史不自动清理。
 
 管理员紧急手工发布优先复用已安装的 `/opt/ledger/bin/deploy-release.sh`：对已验证产物提供完整源码 commit 与 SHA-256，从 stdin 输入二进制。该脚本已有锁、停服备份、候选校验、原子替换和健康回退；不要另写一套直接覆盖可执行文件的快捷命令。必须先读源码并确认权限、来源与参数，具体接口见 CICD。

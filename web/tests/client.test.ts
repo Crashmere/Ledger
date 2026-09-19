@@ -12,6 +12,15 @@ afterEach(() => {
 });
 
 describe('API 部署路径', () => {
+  it('同步失败后可手动重试，普通记账仍禁止盲目重试', async () => {
+    connectionUnavailable.value = true;
+    const fetcher = vi.fn().mockRejectedValueOnce(new TypeError('offline')).mockResolvedValueOnce(new Response('{}'));
+    vi.stubGlobal('fetch', fetcher);
+    await expect(request('/transactions/id/fabricworld', 'POST', {}, { retrySafe: true })).rejects.toThrow();
+    await expect(request('/transactions', 'POST', {})).rejects.toThrow();
+    await expect(request('/transactions/id/fabricworld', 'POST', {}, { retrySafe: true })).resolves.toEqual({});
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
   for (const base of ['/', '/ledger/']) {
     it(`${base} 下的读写都使用相同前缀`, async () => {
       vi.stubEnv('BASE_URL', base);

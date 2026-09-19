@@ -3,9 +3,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import PageSkeleton from '../components/PageSkeleton.vue';
 import SaveStatus from '../components/SaveStatus.vue';
+import FabricWorldSync from '../components/FabricWorldSync.vue';
 import {
   accountService, categoryService, txnService, format, AppError,
-  type Account, type Category, type BatchRow, type BatchPreview,
+  type Account, type Category, type BatchRow, type BatchPreview, type Transaction,
 } from '../api';
 import {
   parseTextTransactions, type TextTransaction,
@@ -31,6 +32,14 @@ const accounts = ref<Account[]>([]);
 const categories = ref(new Map<string, Category[]>());
 const loading = ref(true);
 const saving = ref(false);
+const fabricQueue = ref<Transaction[]>([]);
+async function finishFabricSync(editUrl?: string): Promise<void> {
+  if (editUrl) {
+    fabricQueue.value = [];
+    await nextTick();
+    window.location.assign(editUrl);
+  } else fabricQueue.value.shift();
+}
 const saveError = ref('');
 const saveUncertain = ref(false);
 const showSaveError = ref(false);
@@ -204,6 +213,7 @@ async function commitImport(): Promise<void> {
   error.value = '';
   try {
     const result = await txnService.batch(requestRows.value);
+    fabricQueue.value = result.fabricWorldTransactions ?? [];
     imported.value = { count: result.count, expense: result.expense, income: result.income };
     rows.value = [];
     source.value = '';
@@ -224,12 +234,12 @@ async function commitImport(): Promise<void> {
 }
 
 function allowLeave(): boolean {
-  if (saving.value) return false;
+  if (saving.value || fabricQueue.value.length) return false;
   return !hasDraft.value || window.confirm('当前批次尚未入账，离开将丢失草稿。是否离开？');
 }
 
 function beforeUnload(event: BeforeUnloadEvent): void {
-  if (!hasDraft.value && !saving.value) return;
+  if (!hasDraft.value && !saving.value && !fabricQueue.value.length) return;
   event.preventDefault();
   event.returnValue = '';
 }
@@ -250,7 +260,7 @@ async function retryLoad(): Promise<void> {
   finally { loading.value = false; }
 }
 onBeforeRouteLeave(allowLeave);
-onBeforeRouteUpdate(() => !saving.value);
+onBeforeRouteUpdate(() => !saving.value && !fabricQueue.value.length);
 onMounted(async () => {
   window.addEventListener('beforeunload', beforeUnload);
   window.addEventListener('ledger-reload', retryLoad);
@@ -273,6 +283,8 @@ onBeforeUnmount(() => { previewRequest++; clearTimeout(previewTimer); window.rem
 
 <template>
   <div class="content batch-import">
+    <FabricWorldSync v-if="fabricQueue[0] && !saving" :key="fabricQueue[0].id" :transaction-id="fabricQueue[0].id"
+      :transaction-title="fabricQueue[0].title || '未命名布料'" @finish="finishFabricSync" />
     <SaveStatus v-if="saving || showSaveError" :saving="saving" :error="saveError" :uncertain="saveUncertain"
       @dismiss="showSaveError = false" @review="router.push('/search')" />
     <Teleport to="#topbar-slot">

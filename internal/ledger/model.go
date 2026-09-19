@@ -48,18 +48,19 @@ type CategoryInput struct {
 	Color     int64  `json:"color"`
 }
 type Transaction struct {
-	ID          string  `json:"id"`
-	Type        string  `json:"type"`
-	Amount      int64   `json:"amount"`
-	AccountID   string  `json:"accountId"`
-	ToAccountID *string `json:"toAccountId"`
-	CategoryID  *string `json:"categoryId"`
-	Time        int64   `json:"time"`
-	Date        string  `json:"date"`
-	Title       *string `json:"title"`
-	Note        *string `json:"note"`
-	CreatedAt   int64   `json:"createdAt"`
-	UpdatedAt   int64   `json:"updatedAt"`
+	FabricWorldEligible bool    `json:"fabricWorldEligible"`
+	ID                  string  `json:"id"`
+	Type                string  `json:"type"`
+	Amount              int64   `json:"amount"`
+	AccountID           string  `json:"accountId"`
+	ToAccountID         *string `json:"toAccountId"`
+	CategoryID          *string `json:"categoryId"`
+	Time                int64   `json:"time"`
+	Date                string  `json:"date"`
+	Title               *string `json:"title"`
+	Note                *string `json:"note"`
+	CreatedAt           int64   `json:"createdAt"`
+	UpdatedAt           int64   `json:"updatedAt"`
 }
 type TransactionInput struct {
 	Type        string  `json:"type"`

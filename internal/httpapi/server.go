@@ -19,13 +19,22 @@ import (
 )
 
 type Server struct {
-	store  *ledger.Store
-	assets fs.FS
+	store          *ledger.Store
+	assets         fs.FS
+	fabricWorldURL string
 }
 
-func New(store *ledger.Store, assets fs.FS) http.Handler {
+type Options struct {
+	FabricWorldURL string
+}
+
+func New(store *ledger.Store, assets fs.FS, options ...Options) http.Handler {
 	s := &Server{store: store, assets: assets}
+	if len(options) > 0 {
+		s.fabricWorldURL = strings.TrimRight(options[0].FabricWorldURL, "/")
+	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/transactions/{id}/fabricworld", s.syncFabricWorld)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		if err := store.Ping(r.Context()); err != nil {
 			respondError(w, err)

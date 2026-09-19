@@ -71,7 +71,11 @@ func run() error {
 		slog.Info("数据库已创建", "path", *dbPath)
 		return nil
 	}
-	server := &http.Server{Addr: *addr, Handler: httpapi.New(store, web.Assets()), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 90 * time.Second}
+	fabricWorldURL, configured := os.LookupEnv("LEDGER_FABRICWORLD_URL")
+	if !configured {
+		fabricWorldURL = "http://127.0.0.1:18082"
+	}
+	server := &http.Server{Addr: *addr, Handler: httpapi.New(store, web.Assets(), httpapi.Options{FabricWorldURL: fabricWorldURL}), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 90 * time.Second}
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	done := make(chan error, 1)

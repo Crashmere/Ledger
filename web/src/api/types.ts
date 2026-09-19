@@ -17,6 +17,7 @@ export interface Category {
   id: Id; accountId: Id; name: string; color: number; icon: string | null; orderNum: number; createdAt: number;
 }
 export interface Transaction {
+  fabricWorldEligible?: boolean;
   id: Id; type: TxnType; amount: Cents; accountId: Id; toAccountId: Id | null;
   categoryId: Id | null; time: number; date: string; title: string | null; note: string | null;
   createdAt: number; updatedAt: number;
@@ -61,6 +62,7 @@ export interface BatchRow {
   accountId: Id; categoryId: Id | null; date: string;
 }
 export interface BatchPreview {
+  fabricWorldTransactions?: Transaction[];
   rows: { line: number; transaction: TransactionInput | null; errors: string[] }[];
   income: Cents; expense: Cents; valid: boolean; count: number;
 }

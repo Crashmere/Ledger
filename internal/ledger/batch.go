@@ -27,11 +27,12 @@ type BatchPreviewRow struct {
 	Errors      []string          `json:"errors"`
 }
 type BatchPreview struct {
-	Rows    []BatchPreviewRow `json:"rows"`
-	Income  int64             `json:"income"`
-	Expense int64             `json:"expense"`
-	Valid   bool              `json:"valid"`
-	Count   int               `json:"count"`
+	FabricWorldTransactions []Transaction     `json:"fabricWorldTransactions,omitempty"`
+	Rows                    []BatchPreviewRow `json:"rows"`
+	Income                  int64             `json:"income"`
+	Expense                 int64             `json:"expense"`
+	Valid                   bool              `json:"valid"`
+	Count                   int               `json:"count"`
 }
 
 var amountPattern = regexp.MustCompile(`^[+-]?(?:[0-9]+(?:\.[0-9]{1,2})?|\.[0-9]{1,2})$`)
@@ -122,8 +123,16 @@ func (s *Store) SaveBatch(ctx context.Context, input BatchRequest) (BatchPreview
 			}
 		}
 		for _, row := range result.Rows {
-			if _, e = saveTransaction(ctx, tx, "", *row.Transaction); e != nil {
+			id, e := saveTransaction(ctx, tx, "", *row.Transaction)
+			if e != nil {
 				return e
+			}
+			items, e := readTransactions(ctx, tx, "SELECT "+transactionColumns+transactionJoin+" WHERE t.id=?", id)
+			if e != nil {
+				return e
+			}
+			if items[0].FabricWorldEligible {
+				result.FabricWorldTransactions = append(result.FabricWorldTransactions, items[0])
 			}
 		}
 		return nil
