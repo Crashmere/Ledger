@@ -218,6 +218,75 @@ try {
     await go("/overview");
     assert(page.url().includes("/transactions"));
     assert.equal(await page.locator(".transaction-line").count(), 50);
+    for (const width of [1440, 375]) {
+      await page.setViewportSize({ width, height: width === 375 ? 667 : 1000 });
+      const rows = page.locator(".transaction-line.has-category");
+      const row = rows.first();
+      const categoryName = (
+        await row.locator(".transaction-category").textContent()
+      ).trim();
+      const accountName = (
+        await row.locator(".transaction-account").textContent()
+      ).trim();
+      const account = f.accounts.find((a) => a.name === accountName);
+      const category = f.cats.find(
+        (c) => c.name === categoryName && c.accountId === account.id,
+      );
+      const rgb =
+        "rgb(" +
+        [
+          (category.color >>> 16) & 255,
+          (category.color >>> 8) & 255,
+          category.color & 255,
+        ].join(", ") +
+        ")";
+      assert.equal(
+        await row
+          .locator(".type-icon")
+          .evaluate((el) => getComputedStyle(el).color),
+        rgb,
+      );
+      const badge = row.locator(
+        width === 375
+          ? ".transaction-mobile-meta .category-label"
+          : ".transaction-category .category-label",
+      );
+      assert(await badge.isVisible());
+      assert.equal(
+        await badge.evaluate(
+          (el) => getComputedStyle(el, "::before").backgroundColor,
+        ),
+        rgb,
+      );
+      assert(
+        (await rows.evaluateAll(
+          (els) =>
+            new Set(
+              els.map(
+                (el) => getComputedStyle(el.querySelector(".type-icon")).color,
+              ),
+            ).size,
+        )) > 1,
+      );
+      await row.click();
+      assert.equal(
+        await page
+          .locator("dialog[open] .category-label")
+          .evaluate((el) => getComputedStyle(el, "::before").backgroundColor),
+        rgb,
+      );
+      await page.getByLabel("关闭详情", { exact: true }).click();
+      assert(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      );
+    }
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    console.log(
+      "saved category colors in desktop/mobile ledger and details PASS",
+    );
+
     await page.getByRole("button", { name: "下一页", exact: true }).click();
     await settle();
     assert((await page.locator(".transaction-line").count()) > 0);

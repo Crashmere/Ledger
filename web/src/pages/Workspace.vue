@@ -540,8 +540,15 @@ function displayAmount(t: Transaction) {
 }
 const accountName = (id: string | null) =>
   accounts.value.find((a) => a.id === id)?.name || "未知账户";
+const categoryById = computed(
+  () => new Map(categories.value.map((c) => [c.id, c])),
+);
 const categoryName = (id: string | null) =>
-  categories.value.find((c) => c.id === id)?.name || "未分类";
+  categoryById.value.get(id ?? "")?.name || "未分类";
+function categoryStyle(id: string | null) {
+  const category = categoryById.value.get(id ?? "");
+  return category ? { "--category-color": color(category.color) } : undefined;
+}
 const txnTitle = (t: Transaction) =>
   t.title || (t.type === "transfer" ? "账户转账" : categoryName(t.categoryId));
 const groups = computed(() => {
@@ -962,7 +969,17 @@ onUnmounted(() => {
                     v-for="t in group.items"
                     :key="t.id"
                     class="transaction-line"
-                    :class="{ selected: selected?.id === t.id }"
+                    :class="{
+                      selected: selected?.id === t.id,
+                      'has-category':
+                        t.type !== 'transfer' &&
+                        categoryById.has(t.categoryId ?? ''),
+                    }"
+                    :style="
+                      t.type !== 'transfer'
+                        ? categoryStyle(t.categoryId)
+                        : undefined
+                    "
                     tabindex="0"
                     role="button"
                     :aria-label="txnTitle(t) + ' ' + displayAmount(t)"
@@ -983,11 +1000,12 @@ onUnmounted(() => {
                         }}</small
                         ><small class="transaction-mobile-meta"
                           >{{ accountName(t.accountId) }} ·
-                          {{
-                            t.type === "transfer"
-                              ? "→ " + accountName(t.toAccountId)
-                              : categoryName(t.categoryId)
-                          }}</small
+                          <span v-if="t.type === 'transfer'"
+                            >→ {{ accountName(t.toAccountId) }}</span
+                          >
+                          <span v-else class="category-label">{{
+                            categoryName(t.categoryId)
+                          }}</span></small
                         ></span
                       >
                     </div>
@@ -1108,11 +1126,18 @@ onUnmounted(() => {
           <dd>{{ accountName(selected.accountId) }}</dd>
           <dt>{{ selected.type === "transfer" ? "转入账户" : "分类" }}</dt>
           <dd>
-            {{
-              selected.type === "transfer"
-                ? accountName(selected.toAccountId)
-                : categoryName(selected.categoryId)
-            }}
+            <template v-if="selected.type === 'transfer'">{{
+              accountName(selected.toAccountId)
+            }}</template>
+            <span
+              v-else
+              class="category-label"
+              :class="{
+                'has-category': categoryById.has(selected.categoryId ?? ''),
+              }"
+              :style="categoryStyle(selected.categoryId)"
+              >{{ categoryName(selected.categoryId) }}</span
+            >
           </dd>
           <dt>日期</dt>
           <dd>{{ selected.date }}</dd>
