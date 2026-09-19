@@ -2,6 +2,8 @@
 
 这里描述当前实现与维护方式，不保存聊天纪要或历次迁移方案。先选对应主题，再读具体代码；修改后覆盖旧说明，历史在 Git 中查。
 
+源码仓库为 [Crashmere/Ledger](https://github.com/Crashmere/Ledger)，本地仓库目录使用 `Ledger`。服务器沿用小写命名：`/opt/ledger`、`/ledger/` 和 `ledger.service`，与其他应用的运行约定一致。
+
 ## 阅读导航
 
 | 想了解什么 | 文档 |
