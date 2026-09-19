@@ -18,7 +18,7 @@ function onMonthKeydown(event: KeyboardEvent): void {
   if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
   const target = event.target as HTMLElement | null;
   if (target?.closest('input, textarea, select, [role="tablist"]') || target?.isContentEditable) return;
-  if (document.querySelector('.modal-backdrop, .add-backdrop, [role="dialog"]')) return;
+  if (document.querySelector('dialog[open], .workspace-sheet')) return;
   if (event.key === 'ArrowLeft') prevMonth();
   else nextMonth();
   event.preventDefault();

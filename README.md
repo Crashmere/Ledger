@@ -2,7 +2,7 @@
 
 个人记账 Web 服务：Vue 提供页面，Go 提供 API、业务计算和静态资源，SQLite 保存账本。应用只运行一个 Go 程序，不需要 Docker、Node 或独立数据库服务；多应用共用服务器时，由共享 Nginx 按 URL 路径分发。
 
-保留概览、账户与分类管理、记一笔、报告、搜索、文本批量记账。交易按页读取，余额、筛选、年化和统计在后端完成。没有登录；知道访问地址的人可以查看和修改。必须联网使用。
+界面以一个账本工作台为中心：选择账户范围后，在共享日期和筛选条件下切换明细与洞察。单笔录入、文本批量录入、账户及分类管理在侧面板中完成，关闭后回到原账目范围。交易按页读取，余额、筛选、年化和统计在后端完成。没有登录；知道访问地址的人可以查看和修改。必须联网使用。
 
 ## 本地运行
 
@@ -21,7 +21,7 @@ go run ./cmd/ledger serve --db var/dev.sqlite
 npm --prefix web run dev
 ```
 
-打开 Vite 输出的地址（通常是 [http://127.0.0.1:5173](http://127.0.0.1:5173)），先到账户页新建账户，再记一笔。Vite 将 `/api` 请求代理给 `127.0.0.1:8080`。初次建库只执行一次；正常启动时库缺失会报错。
+打开 Vite 输出的地址（通常是 [http://127.0.0.1:5173](http://127.0.0.1:5173)），先通过“管理账户”新建账户，再记一笔。Vite 将 `/api` 请求代理给 `127.0.0.1:8080`。初次建库只执行一次；正常启动时库缺失会报错。
 
 如果本机 goenv 根据 go.mod 选择尚未安装的版本，可使用已有版本启动官方工具链下载，例如本次环境使用 `GOENV_VERSION=1.24.0 go ...`；这是本机版本管理器的配置，不是项目运行要求。
 
@@ -41,11 +41,13 @@ make build
 
 测试使用临时合成账本，不读取个人财务数据。涵盖转账与删除、筛选、分页完整小计、历史时间、闰年、批量原子性、HTTP 表单、深链接、备份恢复，以及旧库升级后的逐字段保留和失败回滚。
 
+界面回归先执行 `make build BASE_PATH=/ledger/`，再运行 `node scripts/ui-e2e.mjs`。脚本使用相邻 FabricWorld checkout 的 Playwright 和本机 Chrome（可通过 `FABRICWORLD_CHECKOUT`、`PW_CHANNEL` 指定），在本机 19190–19191 启动独立临时账本，覆盖记账、筛选、账户分类管理、共享视图、面板返回、异常状态，以及 320/375/768/1440 px 布局。截图输出到忽略的 `var/ui-verification/`，结束后清理临时数据库。FabricWorld 联动回归见 [架构文档](docs/ARCHITECTURE.md#fabricworld-联动)。
+
 测试和维护报告若含真实账目信息，不纳入公开仓库。
 
 ## 手机使用
 
-手机记账页使用原生金额输入框（小数键盘、最多两位小数），点其他区域失焦后收起键盘；内容可上下滚动。电脑端保留计算器。底部导航在布局中独立占位，不覆盖交易列表。
+桌面左侧直接选择账户范围，顶部提供管理和录入，明细使用紧凑列布局。手机将账户范围放到顶栏，始终可见账户总额；明细合并为用途、账户/分类、金额，右下方提供记账入口。管理与录入面板在手机上占满视口，内容独立滚动，保存按钮固定在面板底部。手机金额和日期使用原生输入，电脑保留可折叠计算器；详情、确认弹窗和键盘焦点均限制在当前操作范围内。
 
 桌面入口通过 manifest 声明 `standalone` 和整个部署目录的导航范围。它只描述启动和导航，不提供 Service Worker、离线账本或缓存写入队列。若旧的 iPhone 桌面图标切页后出现浏览器工具栏，更新后从 `/ledger/` 重新添加到主屏幕；系统可能保留旧图标的入口信息。iOS 版本、HTTP 地址及安装方式仍会影响实际显示，网页不能强制隐藏系统浏览器工具栏。
 
@@ -70,7 +72,7 @@ make build
 维护者先看 [文档入口与已确认约定](docs/README.md) 和 [Agent 维护指引](AGENTS.md)。代码先看 [架构与两条调用链](docs/ARCHITECTURE.md)，再按需要查 [API](docs/API.md)。建议从“保存一笔”读起，然后读“筛选交易并统计”：
 
 1. `web/src/pages/AddTxn.vue` → `web/src/api/index.ts` → `internal/httpapi/server.go` → `internal/ledger/transactions.go`。
-2. `web/src/pages/Search.vue` → `internal/ledger/filters.go` → `transactions.go` / `statistics.go`。
+2. `web/src/pages/Workspace.vue` → `components/FilterPanel.vue` → `internal/ledger/filters.go` → `transactions.go` / `statistics.go`。
 3. `model.go` 和 `schema.sql` 描述类型和持久字段；`ledger_test.go` 是业务规则的具体例子。
 
 日常维护以本 README、docs 和代码为准；变更后主动更新对应文档及服务器副本。共享主机约定由 [server-operations](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/SKILL.md) 统一维护。GitHub 用于源码与 CI/CD，不启用 GitHub Pages，也不用于账本同步。

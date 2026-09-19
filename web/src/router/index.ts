@@ -1,17 +1,88 @@
-import { createRouter, createWebHistory } from 'vue-router';
-import { lazyPage } from './lazyPage';
+import { createRouter, createWebHistory } from "vue-router";
+import { lazyPage } from "./lazyPage";
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { path: '/', redirect: '/overview' },
-    { path: '/overview', name: 'overview', component: lazyPage(() => import('../pages/Overview.vue'), '概览'), meta: { title: '概览' } },
-    { path: '/accounts', name: 'accounts', component: lazyPage(() => import('../pages/Accounts.vue'), '账户'), meta: { title: '账户' } },
-    { path: '/reports', name: 'reports', component: lazyPage(() => import('../pages/Reports.vue'), '报告'), meta: { title: '报告' } },
-    { path: '/search', name: 'search', component: lazyPage(() => import('../pages/Search.vue'), '搜索'), meta: { title: '搜索' } },
-    { path: '/add', name: 'add', component: lazyPage(() => import('../pages/AddTxn.vue'), '记一笔', true), meta: { title: '记一笔' } },
-    { path: '/txn/:id/edit', name: 'txn-edit', component: lazyPage(() => import('../pages/AddTxn.vue'), '编辑交易', true), meta: { title: '编辑交易' } },
-    { path: '/batch', name: 'batch', component: lazyPage(() => import('../pages/BatchImport.vue'), '批量记账', true), meta: { title: '批量记账' } },
-    { path: '/:pathMatch(.*)*', redirect: '/overview' },
+    { path: "/", redirect: "/transactions" },
+    {
+      path: "/overview",
+      redirect: (to) => ({ path: "/transactions", query: to.query }),
+    },
+    {
+      path: "/search",
+      redirect: (to) => ({
+        path: "/transactions",
+        query: { ...to.query, range: "all" },
+      }),
+    },
+    {
+      path: "/reports",
+      redirect: (to) => ({
+        path: "/transactions",
+        query: { ...to.query, view: "insights" },
+      }),
+    },
+    {
+      path: "/accounts",
+      redirect: (to) => ({ path: "/transactions/manage", query: to.query }),
+    },
+    {
+      path: "/add",
+      redirect: (to) => ({ path: "/transactions/add", query: to.query }),
+    },
+    {
+      path: "/batch",
+      redirect: (to) => ({ path: "/transactions/batch", query: to.query }),
+    },
+    {
+      path: "/txn/:id/edit",
+      redirect: (to) => ({
+        path: "/transactions/txn/" + to.params.id + "/edit",
+        query: to.query,
+      }),
+    },
+    {
+      path: "/transactions",
+      name: "transactions",
+      component: lazyPage(() => import("../pages/Workspace.vue"), "账本"),
+      children: [
+        {
+          path: "manage",
+          name: "accounts",
+          component: lazyPage(
+            () => import("../pages/Accounts.vue"),
+            "账户与分类",
+          ),
+        },
+        {
+          path: "add",
+          name: "add",
+          component: lazyPage(
+            () => import("../pages/AddTxn.vue"),
+            "记一笔",
+            true,
+          ),
+        },
+        {
+          path: "batch",
+          name: "batch",
+          component: lazyPage(
+            () => import("../pages/BatchImport.vue"),
+            "批量记账",
+            true,
+          ),
+        },
+        {
+          path: "txn/:id/edit",
+          name: "txn-edit",
+          component: lazyPage(
+            () => import("../pages/AddTxn.vue"),
+            "编辑交易",
+            true,
+          ),
+        },
+      ],
+    },
+    { path: "/:pathMatch(.*)*", redirect: "/transactions" },
   ],
-  scrollBehavior: () => ({ top: 0 }),
 });
