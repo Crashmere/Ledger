@@ -45,7 +45,7 @@ is_delete 只标记账户、分类和交易三张实体表。删除分类时显�
 
 ## FabricWorld 联动
 
-交易响应的 fabricWorldEligible 由服务端按有效账户名“副业”、所属分类名“纺织”和 expense 判断。AddTxn 只在创建成功后显示 FabricWorldSync；SaveBatch 返回 fabricWorldTransactions，批量页依次询问。编辑不触发同步，重命名账户/分类后按新名称判断。
+交易响应的 fabricWorldEligible 由服务端按有效账户名“副业”、所属分类名“纺织”和 expense 判断。AddTxn 在创建成功后自动显示 FabricWorldSync；SaveBatch 返回 fabricWorldTransactions，批量页依次询问。Search 的交易详情卡片与 AddTxn 的已有交易编辑页按服务器返回的资格显示“同步至 FabricWorld”按钮，手动打开同一弹窗。编辑页比较当前表单与已保存交易，有未保存修改时禁用同步并提示先保存；手动同步不提交交易表单。取消或成功后不跳转均留在原详情，重复同步返回既有布料。保存编辑不自动触发同步，重命名账户/分类后按新名称判断。
 
 用户同意后 POST /transactions/:id/fabricworld。Ledger 从自己的数据库重新读取交易，通过 LEDGER_FABRICWORLD_URL（默认 http://127.0.0.1:18082）调用 FabricWorld 的 /api/integrations/ledger。浏览器不能指定目标 URL 或覆盖金额/名称，服务端 HTTP 超时 12 秒，不自动重试。
 
@@ -53,7 +53,7 @@ FabricWorld 用交易 ID 作为持久幂等来源，保存日期、整数分转�
 
 同步弹窗使用原生 dialog，保存中阻止重复点击与导航。同步请求可在网络失败后手动重试，普通交易写入仍遵守未知结果不盲目重试规则。每个服务仍独立数据库、发布、备份；不做跨库事务或持续双向同步。
 
-联动回归：先在两个相邻 checkout 构建本机程序（Ledger 使用 make build BASE_PATH=/ledger/，FabricWorld 使用 make build），再运行 node scripts/fabricworld-e2e.mjs。依赖 FabricWorld 已安装的 Playwright 与 Chrome，可用 FABRICWORLD_CHECKOUT 指定路径。脚本只在临时数据目录写入，监听本机 19080–19082；覆盖 320/375/1440 px、取消、非目标交易、失败、提交后响应丢失、手动重试、字段映射、照片补填与编辑跳转，截图位于忽略的 var/fabricworld-verification。真实手机系统相机未自动化验证。
+联动回归：先在两个相邻 checkout 构建本机程序（Ledger 使用 make build BASE_PATH=/ledger/，FabricWorld 使用 make build），再运行 node scripts/fabricworld-e2e.mjs。依赖 FabricWorld 已安装的 Playwright 与 Chrome，可用 FABRICWORLD_CHECKOUT 指定路径。脚本只在临时数据目录写入，监听本机 19080–19082；覆盖 320/375/1440 px、新建与已有交易两种入口、取消、非目标交易、未保存修改保护、失败、提交后响应丢失、手动重试、重复同步不重新记账或建布料、字段映射、照片补填与编辑跳转，截图位于忽略的 var/fabricworld-verification。真实手机系统相机未自动化验证。
 
 ## 跟读：筛选交易并统计
 

@@ -12,6 +12,7 @@ import {
   type Category,
   type TxnType,
   type Id,
+  type Transaction,
 } from '../api';
 import { evalExpr, isExpression } from '../services/expr';
 import { normalizeAmountInput, parseAmountInput } from '../services/amountInput';
@@ -60,6 +61,24 @@ const saveError = ref('');
 const saveUncertain = ref(false);
 const showSaveError = ref(false);
 const syncTransactionId = ref<Id | null>(null);
+const savedTransaction = ref<Transaction | null>(null);
+const hasUnsavedChanges = computed(() => {
+  const txn = savedTransaction.value;
+  if (!txn) return false;
+  const amount = amountValue.value;
+  return amount === null || yuanToCents(amount) !== txn.amount || type.value !== txn.type
+    || accountId.value !== txn.accountId || toAccountId.value !== txn.toAccountId
+    || categoryId.value !== txn.categoryId || dateStr.value !== txn.date
+    || (title.value.trim() || null) !== (txn.title?.trim() || null)
+    || (note.value.trim() || null) !== (txn.note?.trim() || null);
+});
+function askFabricSync(): void {
+  if (!savedTransaction.value?.fabricWorldEligible || hasUnsavedChanges.value
+    || saving.value || deleting.value || saveUncertain.value || syncTransactionId.value) return;
+  openPicker.value = null;
+  blurAmount();
+  syncTransactionId.value = savedTransaction.value.id;
+}
 useSaveGuard(computed(() => saving.value || syncTransactionId.value !== null));
 async function finishFabricSync(editUrl?: string): Promise<void> {
   syncTransactionId.value = null;
@@ -443,6 +462,7 @@ function onKeydown(e: KeyboardEvent): void {
 }
 
 function resetFormState(): void {
+  savedTransaction.value = null;
   type.value = 'expense';
   accountId.value = null;
   toAccountId.value = null;
@@ -475,6 +495,7 @@ async function initCreate(): Promise<void> {
 
 async function initEdit(id: Id): Promise<void> {
   const txn = await txnService.get(id);
+  savedTransaction.value = txn;
 
   type.value = txn.type;
   accountId.value = txn.accountId;
@@ -546,7 +567,8 @@ onUnmounted(() => {
 <template>
   <div class="content add-content">
     <PageSkeleton v-if="initializing" label="交易表单" form />
-    <FabricWorldSync v-if="syncTransactionId && !saving" :transaction-id="syncTransactionId" @finish="finishFabricSync" />
+    <FabricWorldSync v-if="syncTransactionId && !saving" :transaction-id="syncTransactionId"
+      :return-label="isEdit ? '否，返回详情' : undefined" @finish="finishFabricSync" />
     <SaveStatus v-if="saving || showSaveError" :saving="saving" :error="saveError" :uncertain="saveUncertain"
       @dismiss="showSaveError = false" @review="router.push('/search')" />
     <template v-if="!initializing">
@@ -806,6 +828,15 @@ onUnmounted(() => {
             </svg>
             复制这一笔
           </button>
+
+          <template v-if="isEdit && savedTransaction?.fabricWorldEligible">
+            <button class="btn btn-secondary btn-block mt-2"
+              :disabled="saving || deleting || !!syncTransactionId || saveUncertain || hasUnsavedChanges"
+              :aria-describedby="hasUnsavedChanges ? 'fabric-sync-unsaved' : undefined" @click="askFabricSync">
+              同步至 FabricWorld
+            </button>
+            <p v-if="hasUnsavedChanges" id="fabric-sync-unsaved" class="muted mt-2" role="status">请先保存修改，再同步至 FabricWorld。</p>
+          </template>
 
           <button
             v-if="isEdit"

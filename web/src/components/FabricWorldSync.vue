@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { AppError, txnService } from '../api';
-const props = defineProps<{ transactionId: string; transactionTitle?: string }>();
+const props = defineProps<{ transactionId: string; transactionTitle?: string; returnLabel?: string }>();
 const emit = defineEmits<{ finish: [editUrl?: string] }>();
 const dialog = ref<HTMLDialogElement | null>(null);
 const state = ref<'confirm' | 'syncing' | 'failed' | 'success'>('confirm');
@@ -44,7 +44,7 @@ async function accept(): Promise<void> {
         </p>
       </div>
       <div v-if="state !== 'syncing'" class="fabric-sync-actions">
-        <button class="btn btn-secondary" @click="dismiss">否，返回记账</button>
+        <button class="btn btn-secondary" @click="dismiss">{{ returnLabel || '否，返回记账' }}</button>
         <button ref="primary" class="btn btn-primary" @click="accept">{{ state === 'confirm' ? '是，同步' : state === 'failed' ? '是，重试' : '是，前往编辑' }}</button>
       </div>
     </dialog>

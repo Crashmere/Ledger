@@ -147,6 +147,68 @@ try {
       await page.getByRole('button', { name: '否，返回记账' }).click();
       assert.equal(await page.locator('dialog[open]').count(), 0);
     }
+    // Existing records use the same flow from both detail surfaces without saving a transaction.
+    const previousCount = await count();
+    const existing = await api('/ledger/api/transactions', { type: 'expense', amount: 8765, accountId: account.id,
+      categoryId: category.id, toAccountId: null, date: '2025-03-04', title: '历史棉布 ' + width, note: null });
+    const transactionWrites = [];
+    page.on('request', r => { if (['POST', 'PUT'].includes(r.method()) && /\/api\/transactions(?:\/[a-f0-9-]+)?$/.test(new URL(r.url()).pathname)) transactionWrites.push(r.url()); });
+    await page.goto(base + '/ledger/txn/' + existing.id + '/edit');
+    const syncButton = page.getByRole('button', { name: '同步至 FabricWorld', exact: true });
+    await syncButton.waitFor();
+    assert.equal(await syncButton.isEnabled(), true);
+    await syncButton.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: resolve(output, 'existing-detail-' + width + '.png') });
+    await syncButton.click();
+    await page.getByRole('button', { name: '否，返回详情', exact: true }).click();
+    assert.equal(await count(), previousCount);
+    await page.getByLabel('标题', { exact: true }).fill('尚未保存');
+    assert.equal(await syncButton.isDisabled(), true);
+    await page.getByText('请先保存修改，再同步至 FabricWorld。', { exact: true }).waitFor();
+    await page.getByLabel('标题', { exact: true }).fill(existing.title);
+    assert.equal(await syncButton.isEnabled(), true);
+    let existingAttempts = 0;
+    await page.route('**/api/transactions/*/fabricworld', async route => {
+      existingAttempts++;
+      if (existingAttempts === 1) { await route.fetch(); await route.abort('failed'); }
+      else await route.continue();
+    });
+    await syncButton.click();
+    await page.getByRole('button', { name: '是，同步', exact: true }).click();
+    await page.getByRole('button', { name: '是，重试', exact: true }).click();
+    await page.getByRole('button', { name: '是，前往编辑', exact: true }).waitFor();
+    await page.getByRole('button', { name: '否，返回详情', exact: true }).click();
+    assert.equal(await count(), previousCount + 1);
+    await page.unroute('**/api/transactions/*/fabricworld');
+    await page.goto(base + '/ledger/search');
+    await page.getByLabel('搜索交易', { exact: true }).fill(existing.title);
+    await page.locator('.txn-clickable').filter({ hasText: existing.title }).click();
+    await syncButton.waitFor();
+    await syncButton.scrollIntoViewIfNeeded();
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.screenshot({ path: resolve(output, 'search-detail-' + width + '.png') });
+    await syncButton.click();
+    await page.getByRole('button', { name: '否，返回详情', exact: true }).click();
+    assert.ok(page.url().includes('/ledger/search'));
+    await syncButton.click();
+    await page.getByRole('button', { name: '是，同步', exact: true }).click();
+    await page.getByRole('button', { name: '是，前往编辑', exact: true }).click();
+    await page.waitForURL(/\/fabricworld\/fabrics\/[a-f0-9]{32}\/edit$/);
+    await page.getByLabel('布料名称', { exact: true }).waitFor();
+    assert.equal(await page.getByLabel('布料名称', { exact: true }).inputValue(), existing.title);
+    assert.equal(await page.getByLabel('购买日期', { exact: true }).inputValue(), existing.date);
+    assert.equal(await page.getByLabel('购买总价 / 元', { exact: true }).inputValue(), '87.65');
+    assert.equal(await count(), previousCount + 1);
+    assert.deepEqual(transactionWrites, []);
+    const nonTarget = await api('/ledger/api/transactions', { type: 'income', amount: 100, accountId: account.id,
+      categoryId: category.id, toAccountId: null, date: '2025-03-04', title: '历史退款 ' + width, note: null });
+    await page.goto(base + '/ledger/txn/' + nonTarget.id + '/edit');
+    await page.getByLabel('标题', { exact: true }).waitFor();
+    assert.equal(await syncButton.count(), 0);
+    await page.goto(base + '/ledger/search');
+    await page.getByLabel('搜索交易', { exact: true }).fill(nonTarget.title);
+    await page.locator('.txn-clickable').filter({ hasText: nonTarget.title }).click();
+    assert.equal(await syncButton.count(), 0);
     assert.deepEqual(errors, []);
     await page.close();
     console.log('PASS ' + width + 'px: cancel, non-target, failure, lost response, retry, mapping, edit navigation');

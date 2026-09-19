@@ -20,10 +20,21 @@ import Pagination from '../components/Pagination.vue';
 import LoadError from '../components/LoadError.vue';
 import PageSkeleton from '../components/PageSkeleton.vue';
 import HighlightText from '../components/HighlightText.vue';
+import FabricWorldSync from '../components/FabricWorldSync.vue';
+import { useSaveGuard } from '../composables/useSaveGuard';
 import { dayLabel } from '../services/dates';
 const router = useRouter();
 const { dateFrom, dateTo, monthLabel } = useSelectedMonth();
 const filterByMonth = ref(false);
+const syncTransaction = ref<Transaction | null>(null);
+useSaveGuard(computed(() => syncTransaction.value !== null));
+async function finishFabricSync(editUrl?: string): Promise<void> {
+  syncTransaction.value = null;
+  if (editUrl) {
+    await nextTick();
+    window.location.assign(editUrl);
+  }
+}
 
 function openEdit(id: Id): void {
   void router.push(`/txn/${id}/edit`);
@@ -228,6 +239,7 @@ function moveSelection(delta: number): void {
 }
 
 function onSearchGlobalKeydown(e: KeyboardEvent): void {
+  if (syncTransaction.value) return;
   if (e.altKey || e.defaultPrevented || e.isComposing) return;
   const el = e.target as HTMLElement | null;
   if (e.key !== 'Escape' && el?.closest('button, select, input[type="checkbox"]')) return;
@@ -464,6 +476,8 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
 
 <template>
   <div class="content">
+    <FabricWorldSync v-if="syncTransaction" :transaction-id="syncTransaction.id"
+      :transaction-title="syncTransaction.title || '未命名布料'" return-label="否，返回详情" @finish="finishFabricSync" />
     <PageSkeleton v-if="initializing" label="搜索" />
     <template v-else>
     <LoadError :message="error" @retry="initialize" />
@@ -892,6 +906,8 @@ usePageRefresh(() => { page.value = 1; void initialize(); });
                   排除
                 </button>
               </div>
+              <button v-if="selectedTxn.fabricWorldEligible" class="btn btn-secondary btn-block mt-2"
+                @click="syncTransaction = selectedTxn">同步至 FabricWorld</button>
             </template>
           </div>
         </div>

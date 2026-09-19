@@ -49,6 +49,7 @@ LEDGER_ADDR=127.0.0.1:18080
 LEDGER_DB=/opt/ledger/data/ledger.sqlite
 LEDGER_BINARY=/opt/ledger/bin/ledger
 LEDGER_BACKUP_DIR=/opt/ledger/backups
+LEDGER_FABRICWORLD_URL=http://127.0.0.1:18082
 ```
 
 systemd unit 通过 `/etc/systemd/system/ledger*` 链接到 config。Nginx 的 `/etc/nginx/app-locations/ledger.conf` 链接到本项目 location；`/ledger` 返回 308 到 `/ledger/`，代理地址末尾 `/` 去掉此前缀，保留 Host。全局 server 的维护源不在 Ledger 仓库。同 IP 的不同路径仍属浏览器同源，不是安全隔离。
