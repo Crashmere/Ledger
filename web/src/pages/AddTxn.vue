@@ -640,6 +640,17 @@ onUnmounted(() => {
           <input id="txn-title" ref="titleInputEl" v-model="title" class="input" placeholder="标题（选填，如：晚饭）" />
         </div>
 
+        <div class="field">
+          <label class="field-label" for="txn-note">备注</label>
+          <div class="note-inline">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4v16h16v-7" />
+              <path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z" />
+            </svg>
+            <input id="txn-note" ref="noteInputEl" v-model="note" placeholder="备注（选填，详细信息）" />
+          </div>
+        </div>
+
 
         <div class="add-pair">
 
@@ -753,17 +764,6 @@ onUnmounted(() => {
               </div>
             </div>
             <button class="date-step" aria-label="后一天" @click="shiftDate(1)">›</button>
-          </div>
-        </div>
-
-        <div class="field">
-          <label class="field-label" for="txn-note">备注</label>
-          <div class="note-inline">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M11 4H4v16h16v-7" />
-              <path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z" />
-            </svg>
-            <input id="txn-note" ref="noteInputEl" v-model="note" placeholder="备注（选填，详细信息）" />
           </div>
         </div>
 
