@@ -32,16 +32,10 @@
   letter-spacing: -0.7px;
 }
 .wordmark-symbol {
-  display: grid;
-  place-items: center;
-  background: var(--primary);
-  color: white;
+  display: block;
+  flex-shrink: 0;
   width: 34px;
   height: 34px;
-  border-radius: 11px;
-  box-shadow:
-    inset 0 1px 0 #ffffff26,
-    0 3px 8px #27645218;
 }
 .appbar-label {
   font-size: 12px;
@@ -912,7 +906,6 @@
   .wordmark-symbol {
     width: 25px;
     height: 25px;
-    border-radius: 7px;
   }
   .appbar-actions > .btn {
     font-size: 0;

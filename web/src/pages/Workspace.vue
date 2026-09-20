@@ -34,6 +34,7 @@ import HighlightText from "../components/HighlightText.vue";
 import FabricWorldSync from "../components/FabricWorldSync.vue";
 const route = useRoute();
 const router = useRouter();
+const brandIcon = import.meta.env.BASE_URL + "favicon.svg?v=monogram";
 const accounts = ref<Account[]>([]);
 const categories = ref<Category[]>([]);
 const totalBalance = ref(0);
@@ -673,9 +674,13 @@ onUnmounted(() => {
     >
       <header class="appbar">
         <RouterLink class="wordmark" to="/transactions"
-          ><span class="wordmark-symbol"
-            ><AppIcon name="ledger" :size="17" /></span
-          >ledger</RouterLink
+          ><img
+            class="wordmark-symbol"
+            :src="brandIcon"
+            width="34"
+            height="34"
+            alt=""
+          />ledger</RouterLink
         >
         <span class="appbar-label">个人账本</span>
         <select

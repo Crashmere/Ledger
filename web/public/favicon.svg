@@ -1,6 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="128" fill="#276452"/>
-  <g transform="translate(112 100) scale(12)" fill="none" stroke="#fff" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M6 3h13a1 1 0 0 1 1 1v17H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Zm0 0v14m-3 1a2 2 0 0 1 2-2h15M10 7h6m-6 4h4"/>
-  </g>
+  <defs>
+    <linearGradient id="background" x1="64" y1="0" x2="448" y2="512" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#327663"/>
+      <stop offset="1" stop-color="#174C3D"/>
+    </linearGradient>
+  </defs>
+  <rect id="tile" width="512" height="512" rx="116" fill="url(#background)"/>
+  <path d="M148 128h60v212h160v60H176a28 28 0 0 1-28-28Z" fill="#F6F2E6"/>
+  <rect x="244" y="128" width="124" height="52" rx="12" fill="#E2BA75"/>
+  <rect x="244" y="218" width="88" height="44" rx="10" fill="#F6F2E6"/>
 </svg>
