@@ -1044,6 +1044,11 @@ try {
       } else {
         await page.locator(".trend-point").first().click();
         await page.locator(".heatmap-day").first().click();
+        // Chart clicks now open a popup. Close it before capturing unchanged
+        // chart markup so intentional scroll-dismissal is not a refresh failure.
+        await page.getByRole("region", { name: "区间收支明细" }).waitFor();
+        await page.keyboard.press("Escape");
+        await page.getByRole("region", { name: "区间收支明细" }).waitFor({ state: "hidden" });
       }
       await page.mouse.move(0, 0);
       let queries = 0,

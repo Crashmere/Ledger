@@ -6,6 +6,7 @@ import { calendarMonths } from "../services/insightData";
 import { beijingDate, dateEpoch, shiftDay } from "../services/dates";
 
 const props = defineProps<{ data: DailyResult }>();
+const emit = defineEmits<{ inspect: [date: string, event: MouseEvent]; periodChange: [] }>();
 const year = ref("");
 const activeDate = ref<string | null>(null);
 const today = ref(beijingDate());
@@ -66,7 +67,12 @@ watch(
 );
 watch(year, () => {
   activeDate.value = null;
+  emit("periodChange");
 });
+function inspect(day: DailyTotal, event: MouseEvent) {
+  activeDate.value = day.date;
+  emit("inspect", day.date, event);
+}
 
 function describeDay(day: DailyTotal) {
   return `${day.date} · 支出 ${format(day.expense, { symbol: "¥" })} · ${day.expenseCount} 笔`;
@@ -138,12 +144,9 @@ function describeDay(day: DailyTotal) {
                 :aria-label="
                   (day.date === today ? '今天 · ' : '') + describeDay(day)
                 "
-                :title="
-                  (day.date === today ? '今天 · ' : '') + describeDay(day)
-                "
                 tabindex="-1"
                 @mouseenter="activeDate = day.date"
-                @click="activeDate = day.date"
+                @click="inspect(day, $event)"
               >
                 {{ Number(day.date.slice(8)) }}
               </button>
@@ -152,7 +155,7 @@ function describeDay(day: DailyTotal) {
         </div>
         <div class="heatmap-detail num" role="status">
           {{
-            activeDay ? describeDay(activeDay) : "悬停或点击日期查看当天支出"
+            activeDay ? describeDay(activeDay) : "悬停查看支出 · 点击日期查看收支明细"
           }}
         </div>
         <div class="heatmap-footer">

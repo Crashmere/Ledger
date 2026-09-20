@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import type { Summary, DailyResult, CategoryTotal } from "../api";
+import type { Summary, DailyResult, CategoryTotal, TransactionFilter } from "../api";
 import { money } from "../services/presentation";
 import ExpenseHeatmap from "./ExpenseHeatmap.vue";
+import InsightTransactions from "./InsightTransactions.vue";
+import type { InsightSelection } from "../services/insightTransactions";
 import { trendSeries } from "../services/insightData";
 import { useMediaQuery } from "../composables/useMediaQuery";
 const props = defineProps<{
@@ -10,11 +12,28 @@ const props = defineProps<{
   daily: DailyResult;
   dailyError?: string;
   categories: CategoryTotal[];
+  filter: TransactionFilter;
 }>();
 const direction = defineModel<"expense" | "income">("direction", {
   required: true,
 });
 defineEmits<{ drilldown: [name: string] }>();
+const selection = ref<InsightSelection | null>(null);
+function inspect(from: string, to: string, event: MouseEvent) {
+  const target = event.currentTarget as Element;
+  const rect = target.getBoundingClientRect();
+  selection.value = {
+    from, to,
+    x: event.detail ? event.clientX : rect.left + rect.width / 2,
+    y: event.detail ? event.clientY : rect.top + rect.height / 2,
+  };
+}
+function inspectTrend(index: number, event: MouseEvent) {
+  active.value = index;
+  const point = trend.value.points[index];
+  if (point) inspect(point.from, point.to, event);
+}
+watch(() => props.daily, () => { selection.value = null; });
 // Each response includes both directions; switching only changes this panel.
 const breakdowns = computed(() =>
   (["expense", "income"] as const).map((side) => ({
@@ -128,7 +147,7 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
           ><span class="neg">支出 {{ money(current.expense) }}</span></template
         ><template v-else
           >按{{ unitLabel }}查看收支
-          <span class="chart-help">悬停或点击查看金额</span></template
+          <span class="chart-help">悬停查看金额 · 点击查看收支明细</span></template
         >
       </div>
       <svg
@@ -154,7 +173,7 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
           class="trend-point"
           :data-period="day.key"
           @mouseenter="active = i"
-          @click="active = i"
+          @click="inspectTrend(i, $event)"
         >
           <rect
             :x="45 + i * step"
@@ -181,10 +200,6 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
             fill="var(--expense)"
             rx="1"
           />
-          <title>
-            {{ day.from }} 至 {{ day.to }} 收入 {{ money(day.income) }} 支出
-            {{ money(day.expense) }}
-          </title>
         </g>
         <text
           v-for="point in axisPoints"
@@ -286,9 +301,15 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
                 " 天"
           }}</small>
         </div>
-        <ExpenseHeatmap v-if="!dailyError" :data="daily" />
+        <ExpenseHeatmap
+          v-if="!dailyError"
+          :data="daily"
+          @inspect="(date, event) => inspect(date, date, event)"
+          @period-change="selection = null"
+        />
       </div>
     </div>
+    <InsightTransactions v-if="selection" :selection="selection" :filter="filter" @close="selection = null" />
   </div>
 </template>
 <style scoped>
@@ -359,6 +380,9 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
 .flow-chart text {
   fill: var(--fg-3);
   font-size: 9px;
+}
+.trend-point {
+  cursor: pointer;
 }
 .chart-minimum-hint {
   color: var(--fg-3);

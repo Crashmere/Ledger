@@ -1208,6 +1208,7 @@ onUnmounted(() => {
                   :daily="daily"
                   :daily-error="dailyError"
                   :categories="categoryTotals"
+                  :filter="filter"
                   v-model:direction="direction"
                   @drilldown="drilldown"
                 />
