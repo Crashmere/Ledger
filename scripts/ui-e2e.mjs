@@ -1091,6 +1091,160 @@ try {
   console.log(
     "tab keyboard navigation, transitions, filters and reduced motion PASS",
   );
+  // A short loading skeleton must not shrink the scroll range during view/month changes.
+  const previousMonthDate = new Date(f.month + "-01T00:00:00Z");
+  previousMonthDate.setUTCMonth(previousMonthDate.getUTCMonth() - 1);
+  const previousMonth = previousMonthDate.toISOString().slice(0, 7);
+  const scrollFixtures = [];
+  try {
+    for (let i = 0; i < 14; i++)
+      scrollFixtures.push(
+        await seed("/transactions", {
+          type: "expense",
+          amount: 100 + i,
+          accountId: f.accounts[0].id,
+          categoryId: null,
+          toAccountId: null,
+          date: previousMonth + "-" + String(i + 1).padStart(2, "0"),
+          title: "滚动位置验证",
+          note: null,
+        }),
+      );
+    const delayedQuery = async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      await route.continue();
+    };
+    for (const width of [1440, 375]) {
+      await page.setViewportSize({ width, height: width === 375 ? 667 : 1000 });
+      await go("/transactions");
+      await page.route("**/api/transactions/query", delayedQuery);
+      const position = width === 375 ? 700 : 240;
+      const beginScrollCheck = async () => {
+        await page.locator(".work-area").evaluate((area, position) => {
+          document.activeElement?.blur();
+          area.scrollTop = position;
+        }, position);
+        await page.waitForTimeout(50);
+        assert.equal(
+          await page.locator(".work-area").evaluate((area) => area.scrollTop),
+          position,
+        );
+        await page.evaluate(() => {
+          window.scrollSamples = [];
+          const sample = () => {
+            window.scrollSamples.push(
+              document.querySelector(".work-area").scrollTop,
+            );
+            window.scrollSampleFrame = requestAnimationFrame(sample);
+          };
+          sample();
+        });
+      };
+      const endScrollCheck = async (label, expected = position) => {
+        const samples = await page.evaluate(() => {
+          cancelAnimationFrame(window.scrollSampleFrame);
+          return window.scrollSamples;
+        });
+        assert(samples.length > 0);
+        assert(
+          samples.every((top) => Math.abs(top - expected) <= 1),
+          label +
+            " moved scroll position at " +
+            width +
+            ": " +
+            JSON.stringify([...new Set(samples)]),
+        );
+      };
+      for (const reducedMotion of ["no-preference", "reduce"]) {
+        await page.emulateMedia({ reducedMotion });
+        for (const key of ["Tab", "Shift+Tab", "ArrowLeft", "ArrowRight"]) {
+          await beginScrollCheck();
+          await page.keyboard.press(key);
+          await page.getByLabel("正在加载筛选结果", { exact: true }).waitFor();
+          await page
+            .getByLabel("正在加载筛选结果", { exact: true })
+            .waitFor({ state: "detached" });
+          await page.waitForTimeout(100);
+          await endScrollCheck(reducedMotion + " " + key);
+        }
+      }
+      // Requests can overlap when the user switches quickly; the reservation must survive them.
+      await beginScrollCheck();
+      await page.keyboard.press("Tab");
+      await page.waitForTimeout(220);
+      await page.keyboard.press("ArrowLeft");
+      await page.waitForTimeout(220);
+      await page.keyboard.press("ArrowRight");
+      await page.waitForTimeout(220);
+      await page.keyboard.press("Tab");
+      await page.getByLabel("正在加载筛选结果", { exact: true }).waitFor();
+      await page
+        .getByLabel("正在加载筛选结果", { exact: true })
+        .waitFor({ state: "detached" });
+      await page.waitForTimeout(100);
+      await endScrollCheck("rapid switches");
+      // Scrolling remains usable during loading; completion must not restore an old snapshot.
+      await beginScrollCheck();
+      await page.keyboard.press("Tab");
+      await page.getByLabel("正在加载筛选结果", { exact: true }).waitFor();
+      await page.evaluate(() => cancelAnimationFrame(window.scrollSampleFrame));
+      await page.locator(".work-area").evaluate((area, top) => {
+        area.scrollTop = top;
+      }, position - 80);
+      await page
+        .getByLabel("正在加载筛选结果", { exact: true })
+        .waitFor({ state: "detached" });
+      assert.equal(
+        await page.locator(".work-area").evaluate((area) => area.scrollTop),
+        position - 80,
+      );
+      await page.keyboard.press("Tab");
+      await page
+        .getByLabel("正在加载筛选结果", { exact: true })
+        .waitFor({ state: "detached" });
+      await page.unroute("**/api/transactions/query", delayedQuery);
+      // A genuinely shorter result clamps once to its natural end and leaves no blank filler.
+      await page.route("**/api/transactions/query", async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        await route.fulfill({
+          json: { items: [], totalCount: 0, dayTotals: {} },
+        });
+      });
+      await beginScrollCheck();
+      await page.keyboard.press("ArrowLeft");
+      await page.getByLabel("正在加载筛选结果", { exact: true }).waitFor();
+      assert.equal(
+        await page.locator(".work-area").evaluate((area) => area.scrollTop),
+        position,
+      );
+      await page
+        .getByLabel("正在加载筛选结果", { exact: true })
+        .waitFor({ state: "detached" });
+      const shorter = await page
+        .locator(".work-area")
+        .evaluate((area) => ({
+          top: area.scrollTop,
+          max: area.scrollHeight - area.clientHeight,
+          minHeight: document.querySelector(".view-content").style.minHeight,
+        }));
+      assert.equal(shorter.top, Math.min(position, shorter.max));
+      assert.equal(shorter.minHeight, "");
+      await page.evaluate(() => cancelAnimationFrame(window.scrollSampleFrame));
+      await page.unroute("**/api/transactions/query");
+      await page.keyboard.press("ArrowRight");
+      await settle();
+      console.log(
+        "scroll continuity, rapid switching, loading scroll and short result boundary PASS " +
+          width,
+      );
+    }
+  } finally {
+    await page.evaluate(() => cancelAnimationFrame(window.scrollSampleFrame));
+    await page.unroute("**/api/transactions/query");
+    for (const txn of scrollFixtures)
+      await api("/transactions/" + txn.id, undefined, "DELETE");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+  }
   for (const width of [320, 375, 768, 1440]) {
     const p = await browser.newPage({
       viewport: { width, height: width > 720 ? 1000 : 667 },

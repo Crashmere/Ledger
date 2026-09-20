@@ -187,6 +187,13 @@ const page = ref(1);
 const pageSize = ref(10);
 const totalCount = ref(0);
 const loading = ref(true);
+const resultView = ref<HTMLElement | null>(null);
+const pendingResultHeight = ref(0);
+watch(loading, (pending) => {
+  // Reserve the previous result height before the loading skeleton replaces it.
+  // Otherwise the scroll container shrinks and the browser clamps scrollTop to zero.
+  pendingResultHeight.value = pending ? resultView.value?.offsetHeight || 0 : 0;
+});
 const initialized = ref(false);
 const error = ref("");
 const direction = ref<"expense" | "income">("expense");
@@ -1023,8 +1030,14 @@ onUnmounted(() => {
               </div>
               <div
                 :key="view"
+                ref="resultView"
                 id="ledger-view"
                 class="view-content"
+                :style="
+                  pendingResultHeight
+                    ? { minHeight: pendingResultHeight + 'px' }
+                    : undefined
+                "
                 role="tabpanel"
                 :aria-labelledby="view === 'list' ? 'list-tab' : 'insights-tab'"
                 :aria-busy="loading"

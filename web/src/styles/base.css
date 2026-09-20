@@ -224,6 +224,7 @@
   padding: 28px;
   scrollbar-gutter: stable;
   overscroll-behavior: contain;
+  overflow-anchor: none;
 }
 .work-heading {
   display: flex;
