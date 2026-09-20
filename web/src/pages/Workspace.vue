@@ -406,7 +406,7 @@ watch(
   },
 );
 watch(
-  [filter, sort, direction, view],
+  [filter, sort, view],
   () => {
     if (!initialized.value) return;
     clearTimeout(timer);

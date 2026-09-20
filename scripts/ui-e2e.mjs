@@ -884,6 +884,143 @@ try {
     await page.screenshot({ path: resolve(output, "flow-failure.png") });
     throw e;
   }
+  // Direction is a local presentation choice: no fetch, global skeleton, or layout jump.
+  for (const width of [1440, 375]) {
+    await page.setViewportSize({ width, height: width === 375 ? 667 : 1000 });
+    await go("/transactions?view=insights");
+    await page.locator(".trend-point").first().click();
+    await page.locator(".heatmap-day").first().click();
+    await page.locator(".direction-tabs").scrollIntoViewIfNeeded();
+    await page.mouse.move(0, 0);
+    const requests = [];
+    const recordRequest = (request) => {
+      if (new URL(request.url()).pathname.includes("/api/"))
+        requests.push(new URL(request.url()).pathname);
+    };
+    page.on("request", recordRequest);
+    await page.evaluate(() => {
+      const selectors = [
+        ".trend-section",
+        ".activity-section",
+        ".work-metrics",
+      ];
+      const area = document.querySelector(".work-area");
+      const original = selectors.map((selector) => {
+        const node = document.querySelector(selector);
+        return {
+          selector,
+          node,
+          html: node.innerHTML,
+          top: node.getBoundingClientRect().top,
+        };
+      });
+      const top = area.scrollTop;
+      window.distributionFailures = [];
+      const sample = () => {
+        if (document.querySelector(".page-skeleton"))
+          window.distributionFailures.push("global skeleton");
+        if (Math.abs(area.scrollTop - top) > 1)
+          window.distributionFailures.push("scroll moved");
+        for (const entry of original) {
+          const current = document.querySelector(entry.selector);
+          if (current !== entry.node || current.innerHTML !== entry.html)
+            window.distributionFailures.push("changed " + entry.selector);
+          if (Math.abs(current.getBoundingClientRect().top - entry.top) > 1)
+            window.distributionFailures.push("moved " + entry.selector);
+        }
+        window.distributionFrame = requestAnimationFrame(sample);
+      };
+      sample();
+    });
+    const tabs = page.locator(".direction-tabs");
+    const activePanel = page.locator(".distribution-panel.is-active");
+    await tabs.getByRole("button", { name: "收入", exact: true }).click();
+    assert(
+      await page.getByLabel("正在切换分类统计", { exact: true }).isVisible(),
+    );
+    assert.equal(
+      await page.locator("#ledger-view").getAttribute("aria-busy"),
+      "false",
+    );
+    await settle();
+    assert.equal(
+      await activePanel.locator(".distribution-total > .num").innerText(),
+      await page.locator(".metric-income dd").innerText(),
+    );
+    assert((await activePanel.innerText()).includes("工资"));
+    const values = await activePanel
+      .locator(".category-rank strong")
+      .allTextContents();
+    const amounts = values.map((value) => Number(value.replaceAll(",", "")));
+    assert.deepEqual(
+      amounts,
+      [...amounts].sort((a, b) => b - a),
+    );
+    // Repeat while the previous transition is still running; the last click wins.
+    for (const name of ["支出", "收入", "支出"])
+      await tabs.getByRole("button", { name, exact: true }).click();
+    await settle();
+    assert.equal(
+      await tabs
+        .getByRole("button", { name: "支出", exact: true })
+        .getAttribute("aria-pressed"),
+      "true",
+    );
+    assert.equal(
+      await activePanel.locator(".distribution-total > .num").innerText(),
+      await page.locator(".metric-expense dd").innerText(),
+    );
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await tabs.getByRole("button", { name: "收入", exact: true }).click();
+    await settle();
+    assert.equal(
+      await page.getByLabel("正在切换分类统计", { exact: true }).count(),
+      0,
+    );
+    assert.equal(
+      await activePanel.evaluate(
+        (el) => getComputedStyle(el).transitionDuration,
+      ),
+      "0s",
+    );
+    assert.equal(
+      await page
+        .locator(".distribution-panel:not(.is-active)")
+        .evaluate((el) => el.inert),
+      true,
+    );
+    assert.deepEqual(
+      await page.evaluate(() => {
+        cancelAnimationFrame(window.distributionFrame);
+        return [...new Set(window.distributionFailures)];
+      }),
+      [],
+    );
+    page.off("request", recordRequest);
+    assert.deepEqual(
+      requests,
+      [],
+      "Direction switching must reuse both totals",
+    );
+    // Element screenshots may scroll a tall panel; capture after movement assertions.
+    await page.locator(".distribution").screenshot({
+      path: resolve(output, "distribution-income-" + width + ".png"),
+    });
+    // Clicking a displayed income category still opens the matching filtered transactions.
+    await activePanel.getByRole("button").filter({ hasText: "工资" }).click();
+    await settle();
+    assert.equal(new URL(page.url()).searchParams.get("types"), "income");
+    assert.deepEqual(
+      JSON.parse(new URL(page.url()).searchParams.get("categories")),
+      ["工资"],
+    );
+    assert((await page.locator(".transaction-line").count()) > 0);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    console.log(
+      "local category transition, no requests or layout jumps, rapid switching, reduced motion and income drilldown PASS " +
+        width,
+    );
+  }
   // Page shortcuts never traverse unrelated controls or intercept modal/input editing.
   for (const width of [1440, 375]) {
     await page.setViewportSize({ width, height: width === 375 ? 667 : 1000 });

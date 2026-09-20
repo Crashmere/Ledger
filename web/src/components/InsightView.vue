@@ -4,6 +4,7 @@ import type { Summary, DailyResult, CategoryTotal } from "../api";
 import { money } from "../services/presentation";
 import ExpenseHeatmap from "./ExpenseHeatmap.vue";
 import { trendSeries } from "../services/insightData";
+import { useMediaQuery } from "../composables/useMediaQuery";
 const props = defineProps<{
   summary: Summary;
   daily: DailyResult;
@@ -14,12 +15,26 @@ const direction = defineModel<"expense" | "income">("direction", {
   required: true,
 });
 defineEmits<{ drilldown: [name: string] }>();
-const rows = computed(() =>
-  props.categories
-    .filter((c) => c[direction.value] > 0)
-    .sort((a, b) => b[direction.value] - a[direction.value]),
+// Each response includes both directions; switching only changes this panel.
+const breakdowns = computed(() =>
+  (["expense", "income"] as const).map((side) => ({
+    side,
+    total: props.summary[side],
+    rows: props.categories
+      .filter((c) => c[side] > 0)
+      .sort((a, b) => b[side] - a[side] || b.latest - a.latest),
+  })),
 );
-const total = computed(() => props.summary[direction.value]);
+const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+const switching = ref(false);
+let switchTimer: ReturnType<typeof setTimeout> | undefined;
+watch(direction, () => {
+  clearTimeout(switchTimer);
+  switching.value = !reducedMotion.value;
+  if (switching.value)
+    switchTimer = setTimeout(() => (switching.value = false), 220);
+});
+onUnmounted(() => clearTimeout(switchTimer));
 const trend = computed(() => trendSeries(props.daily.days));
 const unitLabel = computed(
   () => ({ day: "日", month: "月", year: "年" })[trend.value.unit],
@@ -205,36 +220,55 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
             </button>
           </div>
         </div>
-        <div class="distribution-total">
-          <span class="num">{{ money(total) }}</span
-          ><small>{{ rows.length }} 个分类</small>
-        </div>
-        <div class="share-strip" aria-hidden="true">
-          <span
-            v-for="(row, i) in rows"
-            :key="row.name"
-            :style="{ flex: row[direction], background: tone(i) }"
-          />
-        </div>
-        <div v-if="!rows.length" class="empty">
-          当前范围暂无{{ direction === "expense" ? "支出" : "收入" }}
-        </div>
-        <button
-          v-for="(row, i) in rows"
-          :key="row.name"
-          class="category-rank"
-          :disabled="row.name === '未分类'"
-          @click="$emit('drilldown', row.name)"
+        <div
+          class="distribution-content"
+          :aria-busy="switching"
+          aria-label="分类统计"
         >
-          <span class="rank-name"
-            ><i :style="{ background: tone(i) }" />{{ row.name }}</span
-          ><span class="rank-share"
-            >{{
-              total ? ((row[direction] / total) * 100).toFixed(1) : 0
-            }}%</span
-          ><strong class="num">{{ money(row[direction]) }}</strong
-          ><span class="rank-arrow">↗</span>
-        </button>
+          <div
+            v-if="switching"
+            class="distribution-switch-status"
+            role="status"
+            aria-label="正在切换分类统计"
+          />
+          <div
+            v-for="{ side, rows, total } in breakdowns"
+            :key="side"
+            class="distribution-panel"
+            :class="{ 'is-active': direction === side }"
+            :aria-hidden="direction !== side"
+            :inert="direction !== side || switching"
+          >
+            <div class="distribution-total">
+              <span class="num">{{ money(total) }}</span
+              ><small>{{ rows.length }} 个分类</small>
+            </div>
+            <div class="share-strip" aria-hidden="true">
+              <span
+                v-for="(row, i) in rows"
+                :key="row.name"
+                :style="{ flex: row[side], background: tone(i) }"
+              />
+            </div>
+            <div v-if="!rows.length" class="empty">
+              当前范围暂无{{ side === "expense" ? "支出" : "收入" }}
+            </div>
+            <button
+              v-for="(row, i) in rows"
+              :key="row.name"
+              class="category-rank"
+              :disabled="row.name === '未分类'"
+              @click="$emit('drilldown', row.name)"
+            >
+              <span class="rank-name"
+                ><i :style="{ background: tone(i) }" />{{ row.name }}</span
+              ><span class="rank-share"
+                >{{ total ? ((row[side] / total) * 100).toFixed(1) : 0 }}%</span
+              ><strong class="num">{{ money(row[side]) }}</strong
+              ><span class="rank-arrow">↗</span>
+            </button>
+          </div>
+        </div>
       </section>
       <div class="activity-section">
         <div class="annual-inline">
@@ -346,6 +380,57 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
 }
 .insight-bottom > * {
   min-width: 0;
+}
+.distribution-content {
+  position: relative;
+  display: grid;
+}
+.distribution-panel {
+  /* Share a grid cell so switching cannot move the calendar or scroll position. */
+  grid-area: 1 / 1;
+  min-width: 0;
+  align-self: start;
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition:
+    opacity 220ms ease,
+    transform 220ms var(--ease-out),
+    visibility 0s linear 220ms;
+}
+.distribution-panel.is-active {
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+.distribution-switch-status {
+  position: absolute;
+  top: 7px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--surface-3);
+}
+.distribution-switch-status::after {
+  content: "";
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  transform-origin: left;
+  animation: distribution-switch 220ms ease-out both;
+}
+@keyframes distribution-switch {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
 }
 .distribution-total {
   display: flex;
