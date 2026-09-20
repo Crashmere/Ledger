@@ -183,6 +183,7 @@ const daily = ref<DailyResult>({
 const dayTotals = ref<Record<string, DayTotal>>({});
 const dailyError = ref("");
 const page = ref(1);
+const pageSize = ref(10);
 const totalCount = ref(0);
 const loading = ref(true);
 const initialized = ref(false);
@@ -265,6 +266,7 @@ async function load(stats = true) {
       txnService.query({
         filter: f,
         page: page.value,
+        pageSize: pageSize.value,
         includeDayTotals: true,
         sortBy: sort.value.startsWith("amount") ? "amount" : "time",
         sortDir: sort.value.endsWith("asc") ? "asc" : "desc",
@@ -425,7 +427,14 @@ function selectScope(id: string) {
       : "month";
 }
 function changePage(value: number) {
+  if (loading.value) return;
   page.value = value;
+  void load(false);
+}
+function changePageSize(value: number) {
+  if (loading.value || ![10, 20, 50, 100].includes(value)) return;
+  pageSize.value = value;
+  page.value = 1;
   void load(false);
 }
 const selected = ref<Transaction | null>(null);
@@ -589,6 +598,22 @@ function drilldown(name: string) {
   selectedTypes.value = [direction.value];
   view.value = "list";
 }
+function switchViewKey(event: KeyboardEvent) {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  view.value =
+    event.key === "Home"
+      ? "list"
+      : event.key === "End"
+        ? "insights"
+        : view.value === "list"
+          ? "insights"
+          : "list";
+  const tabs = (
+    event.currentTarget as HTMLElement
+  ).querySelectorAll<HTMLButtonElement>('[role="tab"]');
+  tabs[view.value === "list" ? 0 : 1]?.focus();
+}
 const checking = ref(false);
 async function reconnect() {
   checking.value = true;
@@ -671,8 +696,14 @@ onUnmounted(() => {
       </header>
       <div class="workspace-body">
         <aside class="account-rail" aria-label="账户范围">
-          <div class="rail-head">账户总额 <span>CNY</span></div>
-          <span class="rail-total num">{{ money(totalBalance) }}</span>
+          <div class="balance-card">
+            <div class="rail-head">
+              <span><AppIcon name="accounts" :size="15" />账户总额</span
+              ><span>CNY</span>
+            </div>
+            <span class="rail-total num">{{ money(totalBalance) }}</span>
+            <span class="balance-caption">让每一笔，都心中有数</span>
+          </div>
           <button
             class="scope-all"
             :class="{ on: !selectedAccounts.length }"
@@ -736,7 +767,7 @@ onUnmounted(() => {
                   scopeAccount?.kind === "project"
                     ? scopePeriod +
                       (scopeAccount.archivedAt ? " · 已归档" : " · 进行中")
-                    : "收支明细与洞察，使用同一组筛选条件"
+                    : "日常的点滴，生活的账迹。"
                 }}
               </p>
             </div>
@@ -775,22 +806,31 @@ onUnmounted(() => {
           <PageSkeleton v-if="!initialized && loading" label="账本" />
           <template v-else>
             <dl class="work-metrics">
-              <div>
-                <dt>{{ scopeAccount ? "流出" : "支出" }}</dt>
+              <div class="metric-expense">
+                <dt>
+                  <span>{{ scopeAccount ? "流出" : "支出" }}</span
+                  ><AppIcon name="expense" :size="15" />
+                </dt>
                 <dd class="num">
                   {{ money(scopeAccount ? summary.outflow : summary.expense) }}
                 </dd>
                 <small>{{ summary.expenseCount }} 笔支出</small>
               </div>
-              <div>
-                <dt>{{ scopeAccount ? "流入" : "收入" }}</dt>
+              <div class="metric-income">
+                <dt>
+                  <span>{{ scopeAccount ? "流入" : "收入" }}</span
+                  ><AppIcon name="income" :size="15" />
+                </dt>
                 <dd class="num">
                   {{ money(scopeAccount ? summary.inflow : summary.income) }}
                 </dd>
                 <small>{{ summary.incomeCount }} 笔收入</small>
               </div>
-              <div>
-                <dt>{{ scopeAccount ? "净流入" : "收支净额" }}</dt>
+              <div class="metric-net">
+                <dt>
+                  <span>{{ scopeAccount ? "净流入" : "收支净额" }}</span
+                  ><AppIcon name="reports" :size="15" />
+                </dt>
                 <dd
                   class="num net-number"
                   :class="
@@ -814,8 +854,11 @@ onUnmounted(() => {
                   scopeAccount ? "包含转入与转出" : "转账不计入收支"
                 }}</small>
               </div>
-              <div>
-                <dt>折合全年支出</dt>
+              <div class="metric-annual">
+                <dt>
+                  <span>折合全年支出</span
+                  ><AppIcon name="calendar" :size="15" />
+                </dt>
                 <dd class="num">
                   {{
                     summary.annual.amount === null
@@ -830,239 +873,279 @@ onUnmounted(() => {
                 }}</small>
               </div>
             </dl>
-            <div class="data-tools">
-              <div class="view-tabs" role="tablist" aria-label="账本视图">
-                <button
-                  role="tab"
-                  :aria-selected="view === 'list'"
-                  :class="{ on: view === 'list' }"
-                  @click="view = 'list'"
+            <section class="ledger-content" aria-label="收支记录与分析">
+              <div class="data-tools">
+                <div
+                  class="view-tabs"
+                  role="tablist"
+                  aria-label="账本视图"
+                  :class="{ 'show-insights': view === 'insights' }"
+                  @keydown="switchViewKey"
                 >
-                  <AppIcon name="ledger" :size="15" />明细</button
-                ><button
-                  role="tab"
-                  :aria-selected="view === 'insights'"
-                  :class="{ on: view === 'insights' }"
-                  @click="view = 'insights'"
-                >
-                  <AppIcon name="reports" :size="15" />洞察
-                </button>
-              </div>
-              <div class="tool-search">
-                <AppIcon name="search" :size="15" /><input
-                  id="workspace-search"
-                  v-model="keyword"
-                  aria-label="搜索交易"
-                  placeholder="搜索标题、备注或分类"
-                  @keydown.enter="rememberSearch"
-                  @blur="rememberSearch"
-                /><button
-                  v-if="keyword"
-                  class="icon-btn"
-                  aria-label="清除搜索"
-                  @click="keyword = ''"
-                >
-                  <AppIcon name="close" :size="13" /></button
-                ><kbd v-else class="kbd">/</kbd>
-              </div>
-              <button
-                class="btn btn-ghost"
-                :aria-expanded="filtersOpen"
-                @click="filtersOpen = !filtersOpen"
-              >
-                <AppIcon name="filter" :size="15" />筛选<span
-                  v-if="
-                    selectedTypes.length +
-                    selectedCategories.length +
-                    (min !== null || max !== null ? 1 : 0)
-                  "
-                  >·
-                  {{
-                    selectedTypes.length +
-                    selectedCategories.length +
-                    (min !== null || max !== null ? 1 : 0)
-                  }}</span
-                >
-              </button>
-            </div>
-            <div v-if="filtersOpen" class="filter-content">
-              <FilterPanel
-                :accounts="accounts"
-                :categories="uniqueCategories"
-                v-model:types="selectedTypes"
-                v-model:accountIds="selectedAccounts"
-                v-model:categoryNames="selectedCategories"
-                v-model:min="min"
-                v-model:max="max"
-                allow-transfer
-                always-open
-              />
-              <div class="search-settings">
-                搜索范围
-                <label
-                  v-for="f in ['title', 'note', 'category'] as const"
-                  :key="f"
-                  ><input
-                    type="checkbox"
-                    :checked="fields.includes(f)"
-                    :disabled="fields.length === 1 && fields.includes(f)"
-                    @change="toggleField(f)"
-                  />{{
-                    { title: "标题", note: "备注", category: "分类" }[f]
-                  }}</label
-                >
-              </div>
-              <div v-if="recent.length" class="recent-search">
-                <span>最近搜索</span
-                ><button v-for="k in recent" :key="k" @click="keyword = k">
-                  {{ k }}</button
-                ><button @click="clearRecent">清空</button>
-              </div>
-            </div>
-            <div class="result-toolbar">
-              <span
-                >{{ totalCount }} 笔交易<span v-if="selectedCategories.length">
-                  · {{ selectedCategories.join("、") }}</span
-                ><span v-if="keyword"> · “{{ keyword }}”</span></span
-              ><button
-                v-if="excluded.length"
-                class="text-button"
-                @click="excluded = []"
-              >
-                恢复 {{ excluded.length }} 笔排除</button
-              ><select
-                v-if="view === 'list'"
-                v-model="sort"
-                aria-label="展示排序"
-              >
-                <option value="time-desc">时间 · 从新到旧</option>
-                <option value="time-asc">时间 · 从旧到新</option>
-                <option value="amount-desc">金额 · 从高到低</option>
-                <option value="amount-asc">金额 · 从低到高</option>
-              </select>
-            </div>
-            <PageSkeleton v-if="loading" label="筛选结果" compact />
-            <template v-else-if="view === 'list'"
-              ><div v-if="!transactions.length && !error" class="empty">
-                <strong>当前条件下没有交易</strong>
-                <p>调整账户、日期或筛选，或者记录第一笔。</p>
-                <button class="btn btn-primary" @click="navigate('add')">
-                  记一笔
-                </button>
-              </div>
-              <div v-else class="transaction-table">
-                <div class="table-head">
-                  <span>交易</span><span>账户</span><span>分类</span
-                  ><span>金额 / CNY</span><span />
-                </div>
-                <template
-                  v-for="(group, index) in groups"
-                  :key="group.date + index"
-                  ><div class="day-divider">
-                    <strong>{{ dayLabel(group.date) }}</strong
-                    ><span
-                      >支 {{ money(dayTotals[group.date]?.expense || 0) }} · 收
-                      {{ money(dayTotals[group.date]?.income || 0) }}</span
-                    >
-                  </div>
-                  <div
-                    v-for="t in group.items"
-                    :key="t.id"
-                    class="transaction-line"
-                    :class="{
-                      selected: selected?.id === t.id,
-                      'has-category':
-                        t.type !== 'transfer' &&
-                        categoryById.has(t.categoryId ?? ''),
-                    }"
-                    :style="
-                      t.type !== 'transfer'
-                        ? categoryStyle(t.categoryId)
-                        : undefined
-                    "
-                    tabindex="0"
-                    role="button"
-                    :aria-label="txnTitle(t) + ' ' + displayAmount(t)"
-                    @click="openDetail(t)"
-                    @keydown.enter="openDetail(t)"
-                    @keydown.space.prevent="openDetail(t)"
+                  <button
+                    id="list-tab"
+                    role="tab"
+                    aria-controls="ledger-view"
+                    :tabindex="view === 'list' ? 0 : -1"
+                    :aria-selected="view === 'list'"
+                    :class="{ on: view === 'list' }"
+                    @click="view = 'list'"
                   >
-                    <div class="transaction-subject">
-                      <span class="type-icon" :class="t.type"
-                        ><AppIcon :name="t.type" :size="14" /></span
-                      ><span
-                        ><strong
-                          ><HighlightText
-                            :text="txnTitle(t)"
-                            :keyword="keyword" /></strong
-                        ><small class="transaction-note">{{
-                          t.note || typeName(t.type)
-                        }}</small
-                        ><small class="transaction-mobile-meta"
-                          >{{ accountName(t.accountId) }} ·
-                          <span v-if="t.type === 'transfer'"
-                            >→ {{ accountName(t.toAccountId) }}</span
-                          >
-                          <span v-else class="category-label">{{
-                            categoryName(t.categoryId)
-                          }}</span></small
-                        ></span
+                    <AppIcon name="ledger" :size="15" />明细</button
+                  ><button
+                    id="insights-tab"
+                    role="tab"
+                    aria-controls="ledger-view"
+                    :tabindex="view === 'insights' ? 0 : -1"
+                    :aria-selected="view === 'insights'"
+                    :class="{ on: view === 'insights' }"
+                    @click="view = 'insights'"
+                  >
+                    <AppIcon name="reports" :size="15" />洞察
+                  </button>
+                </div>
+                <div class="tool-search">
+                  <AppIcon name="search" :size="15" /><input
+                    id="workspace-search"
+                    v-model="keyword"
+                    aria-label="搜索交易"
+                    placeholder="搜索标题、备注或分类"
+                    @keydown.enter="rememberSearch"
+                    @blur="rememberSearch"
+                  /><button
+                    v-if="keyword"
+                    class="icon-btn"
+                    aria-label="清除搜索"
+                    @click="keyword = ''"
+                  >
+                    <AppIcon name="close" :size="13" /></button
+                  ><kbd v-else class="kbd">/</kbd>
+                </div>
+                <button
+                  class="btn btn-ghost"
+                  :class="{ 'filter-active': filtersOpen }"
+                  :aria-expanded="filtersOpen"
+                  @click="filtersOpen = !filtersOpen"
+                >
+                  <AppIcon name="filter" :size="15" />筛选<span
+                    v-if="
+                      selectedTypes.length +
+                      selectedCategories.length +
+                      (min !== null || max !== null ? 1 : 0)
+                    "
+                    >·
+                    {{
+                      selectedTypes.length +
+                      selectedCategories.length +
+                      (min !== null || max !== null ? 1 : 0)
+                    }}</span
+                  >
+                </button>
+              </div>
+              <Transition name="filter-reveal">
+                <div v-if="filtersOpen" class="filter-reveal">
+                  <div class="filter-content">
+                    <FilterPanel
+                      :accounts="accounts"
+                      :categories="uniqueCategories"
+                      v-model:types="selectedTypes"
+                      v-model:accountIds="selectedAccounts"
+                      v-model:categoryNames="selectedCategories"
+                      v-model:min="min"
+                      v-model:max="max"
+                      allow-transfer
+                      always-open
+                    />
+                    <div class="search-settings">
+                      搜索范围
+                      <label
+                        v-for="f in ['title', 'note', 'category'] as const"
+                        :key="f"
+                        ><input
+                          type="checkbox"
+                          :checked="fields.includes(f)"
+                          :disabled="fields.length === 1 && fields.includes(f)"
+                          @change="toggleField(f)"
+                        />{{
+                          { title: "标题", note: "备注", category: "分类" }[f]
+                        }}</label
                       >
                     </div>
-                    <span class="transaction-account"
-                      ><i
-                        class="account-mark"
-                        :style="{
-                          background: color(
-                            accounts.find((a) => a.id === t.accountId)?.color ||
-                              0,
-                          ),
-                        }"
-                      />{{ accountName(t.accountId) }}</span
-                    ><span class="transaction-category"
-                      ><span class="category-label">{{
-                        t.type === "transfer"
-                          ? "→ " + accountName(t.toAccountId)
-                          : categoryName(t.categoryId)
-                      }}</span></span
-                    ><span
-                      class="transaction-amount num"
-                      :class="
-                        t.type === 'expense'
-                          ? 'neg'
-                          : t.type === 'income'
-                            ? 'pos'
-                            : 'tr'
-                      "
-                      >{{ displayAmount(t) }}</span
-                    ><button
-                      class="icon-btn"
-                      aria-label="编辑交易"
-                      @click.stop="navigate('txn/' + t.id + '/edit')"
-                      @keydown.stop
-                    >
-                      <AppIcon name="edit" :size="14" />
-                    </button></div
-                ></template>
+                    <div v-if="recent.length" class="recent-search">
+                      <span>最近搜索</span
+                      ><button
+                        v-for="k in recent"
+                        :key="k"
+                        @click="keyword = k"
+                      >
+                        {{ k }}</button
+                      ><button @click="clearRecent">清空</button>
+                    </div>
+                  </div>
+                </div>
+              </Transition>
+              <div class="result-toolbar">
+                <span
+                  >{{ totalCount }} 笔交易<span
+                    v-if="selectedCategories.length"
+                  >
+                    · {{ selectedCategories.join("、") }}</span
+                  ><span v-if="keyword"> · “{{ keyword }}”</span></span
+                ><button
+                  v-if="excluded.length"
+                  class="text-button"
+                  @click="excluded = []"
+                >
+                  恢复 {{ excluded.length }} 笔排除</button
+                ><select
+                  v-if="view === 'list'"
+                  v-model="sort"
+                  aria-label="展示排序"
+                >
+                  <option value="time-desc">时间 · 从新到旧</option>
+                  <option value="time-asc">时间 · 从旧到新</option>
+                  <option value="amount-desc">金额 · 从高到低</option>
+                  <option value="amount-asc">金额 · 从低到高</option>
+                </select>
               </div>
-              <div class="statement-footer">
-                <span>小计包含当日全部匹配交易</span
-                ><Pagination
-                  :page="page"
-                  :total="totalCount"
-                  :loading="loading"
-                  @change="changePage"
-                /></div
-            ></template>
-            <InsightView
-              v-else
-              :summary="summary"
-              :daily="daily"
-              :daily-error="dailyError"
-              :categories="categoryTotals"
-              v-model:direction="direction"
-              @drilldown="drilldown"
-            />
+              <div
+                :key="view"
+                id="ledger-view"
+                class="view-content"
+                role="tabpanel"
+                :aria-labelledby="view === 'list' ? 'list-tab' : 'insights-tab'"
+                :aria-busy="loading"
+              >
+                <PageSkeleton v-if="loading" label="筛选结果" compact />
+                <template v-else-if="view === 'list'"
+                  ><div v-if="!transactions.length && !error" class="empty">
+                    <span class="empty-icon"
+                      ><AppIcon name="ledger" :size="27"
+                    /></span>
+                    <strong>当前条件下没有交易</strong>
+                    <p>调整账户、日期或筛选，或者记录第一笔。</p>
+                    <button class="btn btn-primary" @click="navigate('add')">
+                      记一笔
+                    </button>
+                  </div>
+                  <div v-else class="transaction-table">
+                    <div class="table-head">
+                      <span>交易</span><span>账户</span><span>分类</span
+                      ><span>金额 / CNY</span><span />
+                    </div>
+                    <template
+                      v-for="(group, index) in groups"
+                      :key="group.date + index"
+                      ><div class="day-divider">
+                        <strong>{{ dayLabel(group.date) }}</strong
+                        ><span
+                          >支 {{ money(dayTotals[group.date]?.expense || 0) }} ·
+                          收
+                          {{ money(dayTotals[group.date]?.income || 0) }}</span
+                        >
+                      </div>
+                      <div
+                        v-for="t in group.items"
+                        :key="t.id"
+                        class="transaction-line"
+                        :class="{
+                          selected: selected?.id === t.id,
+                          'has-category':
+                            t.type !== 'transfer' &&
+                            categoryById.has(t.categoryId ?? ''),
+                        }"
+                        :style="
+                          t.type !== 'transfer'
+                            ? categoryStyle(t.categoryId)
+                            : undefined
+                        "
+                        tabindex="0"
+                        role="button"
+                        :aria-label="txnTitle(t) + ' ' + displayAmount(t)"
+                        @click="openDetail(t)"
+                        @keydown.enter="openDetail(t)"
+                        @keydown.space.prevent="openDetail(t)"
+                      >
+                        <div class="transaction-subject">
+                          <span class="type-icon" :class="t.type"
+                            ><AppIcon :name="t.type" :size="14" /></span
+                          ><span
+                            ><strong
+                              ><HighlightText
+                                :text="txnTitle(t)"
+                                :keyword="keyword" /></strong
+                            ><small class="transaction-note">{{
+                              t.note || typeName(t.type)
+                            }}</small
+                            ><small class="transaction-mobile-meta"
+                              >{{ accountName(t.accountId) }} ·
+                              <span v-if="t.type === 'transfer'"
+                                >→ {{ accountName(t.toAccountId) }}</span
+                              >
+                              <span v-else class="category-label">{{
+                                categoryName(t.categoryId)
+                              }}</span></small
+                            ></span
+                          >
+                        </div>
+                        <span class="transaction-account"
+                          ><i
+                            class="account-mark"
+                            :style="{
+                              background: color(
+                                accounts.find((a) => a.id === t.accountId)
+                                  ?.color || 0,
+                              ),
+                            }"
+                          />{{ accountName(t.accountId) }}</span
+                        ><span class="transaction-category"
+                          ><span class="category-label">{{
+                            t.type === "transfer"
+                              ? "→ " + accountName(t.toAccountId)
+                              : categoryName(t.categoryId)
+                          }}</span></span
+                        ><span
+                          class="transaction-amount num"
+                          :class="
+                            t.type === 'expense'
+                              ? 'neg'
+                              : t.type === 'income'
+                                ? 'pos'
+                                : 'tr'
+                          "
+                          >{{ displayAmount(t) }}</span
+                        ><button
+                          class="icon-btn"
+                          aria-label="编辑交易"
+                          @click.stop="navigate('txn/' + t.id + '/edit')"
+                          @keydown.stop
+                        >
+                          <AppIcon name="edit" :size="14" />
+                        </button></div
+                    ></template>
+                  </div>
+                  <div class="statement-footer">
+                    <span>小计包含当日全部匹配交易</span
+                    ><Pagination
+                      :page="page"
+                      :page-size="pageSize"
+                      :total="totalCount"
+                      :loading="loading"
+                      @change="changePage"
+                      @size-change="changePageSize"
+                    /></div
+                ></template>
+                <InsightView
+                  v-else
+                  :summary="summary"
+                  :daily="daily"
+                  :daily-error="dailyError"
+                  :categories="categoryTotals"
+                  v-model:direction="direction"
+                  @drilldown="drilldown"
+                />
+              </div>
+            </section>
           </template>
         </main>
       </div>
@@ -1070,9 +1153,12 @@ onUnmounted(() => {
         <AppIcon name="plus" :size="17" />记一笔
       </button>
     </div>
-    <template v-if="isSheet"
-      ><div class="sheet-scrim" @click="closeSheet" />
+    <Transition name="scrim">
+      <div v-if="isSheet" class="sheet-scrim" @click="closeSheet" />
+    </Transition>
+    <Transition name="sheet">
       <section
+        v-if="isSheet"
         ref="sheetElement"
         :inert="connectionUnavailable || undefined"
         class="workspace-sheet"
@@ -1095,8 +1181,9 @@ onUnmounted(() => {
             <AppIcon name="close" :size="19" />
           </button>
         </header>
-        <div class="sheet-scroll"><RouterView /></div></section
-    ></template>
+        <div class="sheet-scroll"><RouterView /></div>
+      </section>
+    </Transition>
     <dialog
       ref="detail"
       class="detail-dialog"

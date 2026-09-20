@@ -1,45 +1,48 @@
 :root {
-  --primary: #3159dc;
-  --primary-strong: #2344b9;
-  --primary-soft: #edf1ff;
+  --primary: #276452;
+  --primary-strong: #194a3c;
+  --primary-soft: #eaf2ed;
   --primary-fg: #fff;
-  --income: #12866d;
-  --income-soft: #e9f7f2;
-  --expense: #d15a51;
-  --expense-soft: #fff0ec;
-  --transfer: #6c6e97;
-  --transfer-soft: #f1f0f8;
-  --bg: #eef1f7;
+  --income: #277660;
+  --income-soft: #edf5ef;
+  --expense: #b55540;
+  --expense-soft: #fbefe9;
+  --transfer: #6f6a91;
+  --transfer-soft: #f2f0f7;
+  --bg: #efeee9;
   --surface: #fff;
-  --surface-2: #f7f8fc;
-  --surface-3: #eceff5;
-  --fg: #202c46;
-  --fg-2: #647089;
-  --fg-3: #8490a3;
-  --border: #e6eaf2;
-  --border-strong: #ccd4e3;
-  --ring: #3159dc25;
-  --chart-1: #3159dc;
-  --chart-2: #728de7;
-  --chart-3: #36a8a5;
-  --chart-4: #e5a358;
-  --chart-5: #ab85cd;
-  --chart-6: #d7788c;
-  --chart-7: #94acc2;
+  --surface-2: #f7f8f4;
+  --surface-3: #edf0e9;
+  --fg: #253b33;
+  --fg-2: #617068;
+  --fg-3: #778178;
+  --border: #e6eae2;
+  --border-strong: #ccd5ca;
+  --ring: #27645220;
+  --chart-1: #276452;
+  --chart-2: #7d9c80;
+  --chart-3: #c2a366;
+  --chart-4: #ce8872;
+  --chart-5: #9792b0;
+  --chart-6: #7fa5ad;
+  --chart-7: #b1b7a0;
   --font-sans: "DM Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-mono: "DM Sans", "PingFang SC", sans-serif;
   --fs-body: 14px;
   --fs-sm: 12px;
   --fs-xs: 11px;
   --fs-h3: 14px;
-  --r-sm: 5px;
-  --r-md: 8px;
-  --r-lg: 12px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 18px;
   --r-pill: 99px;
   --sp-5: 20px;
-  --sh-1: 0 1px 3px #202c4608;
-  --sh-2: 0 6px 24px #202c4610;
-  --sh-3: 0 20px 80px #202c462b;
+  --sh-1: 0 2px 5px #253b3305;
+  --sh-2: 0 8px 30px #253b330a;
+  --sh-3: 0 24px 80px #1b35252b;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 160ms;
+  --duration-enter: 280ms;
 }
 * {
   box-sizing: border-box;
@@ -71,6 +74,7 @@ button {
   border: 0;
   background: none;
   cursor: pointer;
+  touch-action: manipulation;
 }
 button:disabled {
   cursor: not-allowed;
@@ -130,9 +134,10 @@ h3 {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 9px 14px;
-  border-radius: 8px;
-  font-size: 12px;
+  padding: 10px 15px;
+  border-radius: 10px;
+  font-size: 13px;
+  min-height: 40px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -143,6 +148,9 @@ h3 {
 .btn-primary {
   background: var(--primary);
   color: white;
+  box-shadow:
+    0 3px 8px #2764521a,
+    inset 0 1px 0 #ffffff12;
 }
 .btn-primary:hover {
   background: var(--primary-strong);
@@ -174,11 +182,11 @@ h3 {
   font-size: 14px;
 }
 .icon-btn {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: inline-grid;
   place-items: center;
-  border-radius: 7px;
+  border-radius: 10px;
   color: var(--fg-2);
 }
 .icon-btn:hover {
@@ -188,8 +196,8 @@ h3 {
   width: 100%;
   border: 1px solid var(--border-strong);
   background: var(--surface);
-  border-radius: 7px;
-  padding: 10px 12px;
+  border-radius: 10px;
+  padding: 11px 13px;
   min-width: 0;
 }
 .input:focus {
@@ -224,7 +232,7 @@ h3 {
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   min-width: 0;
 }
 .card-head {
@@ -307,11 +315,11 @@ h3 {
   gap: 4px;
 }
 .month-switch button {
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 34px;
   display: grid;
   place-items: center;
-  border-radius: 5px;
+  border-radius: 8px;
 }
 .month-switch button:hover {
   background: var(--surface-3);
@@ -319,7 +327,7 @@ h3 {
 .month-switch .m-label {
   font-size: 13px;
   font-weight: 600;
-  min-width: 88px;
+  min-width: 92px;
   text-align: center;
 }
 .month-kbd {
@@ -367,7 +375,7 @@ h3 {
     display: none;
   }
   .btn {
-    min-height: 36px;
+    min-height: 40px;
   }
   .g-3 {
     grid-template-columns: 1fr;
@@ -375,6 +383,56 @@ h3 {
   .card-pad {
     padding: 14px;
   }
+}
+button,
+.btn,
+a,
+.input,
+select,
+textarea {
+  transition:
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease,
+    transform var(--duration-fast) var(--ease-out);
+}
+.btn:active:not(:disabled),
+.icon-btn:active:not(:disabled),
+.mobile-create:active {
+  transform: scale(0.97);
+}
+::selection {
+  background: #d7e8d9;
+  color: var(--primary-strong);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--fg-3);
+  opacity: 1;
+}
+@keyframes content-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+dialog[open] {
+  animation: dialog-in var(--duration-enter) var(--ease-out);
 }
 @media (prefers-reduced-motion: reduce) {
   *,

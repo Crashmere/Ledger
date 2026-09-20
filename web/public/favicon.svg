@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#1a73e8"/>
-  <text x="50%" y="52%" dominant-baseline="central" text-anchor="middle"
-        font-family="DM Sans, PingFang SC, Microsoft YaHei, sans-serif"
-        font-size="300" font-weight="700" fill="#ffffff">记</text>
+  <rect width="512" height="512" rx="128" fill="#276452"/>
+  <g transform="translate(112 100) scale(12)" fill="none" stroke="#fff" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 3h13a1 1 0 0 1 1 1v17H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Zm0 0v14m-3 1a2 2 0 0 1 2-2h15M10 7h6m-6 4h4"/>
+  </g>
 </svg>

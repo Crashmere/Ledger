@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import type { Summary, DailyResult, CategoryTotal } from "../api";
 import { money } from "../services/presentation";
 import ExpenseHeatmap from "./ExpenseHeatmap.vue";
+import { trendSeries } from "../services/insightData";
 const props = defineProps<{
   summary: Summary;
   daily: DailyResult;
@@ -19,15 +20,90 @@ const rows = computed(() =>
     .sort((a, b) => b[direction.value] - a[direction.value]),
 );
 const total = computed(() => props.summary[direction.value]);
-const max = computed(() =>
-  Math.max(1, ...props.daily.days.flatMap((d) => [d.expense, d.income])),
+const trend = computed(() => trendSeries(props.daily.days));
+const unitLabel = computed(
+  () => ({ day: "日", month: "月", year: "年" })[trend.value.unit],
 );
+const max = computed(() => {
+  const largest = Math.max(
+    100,
+    ...trend.value.points.flatMap((d) => [d.expense, d.income]),
+  );
+  const magnitude = 10 ** Math.floor(Math.log10(largest / 4));
+  const tick =
+    ([1, 2, 2.5, 5, 10].find((value) => value * magnitude >= largest / 4) ??
+      10) * magnitude;
+  return tick * 4;
+});
 const active = ref<number | null>(null);
 const current = computed(() =>
-  active.value === null ? null : props.daily.days[active.value],
+  active.value === null ? null : trend.value.points[active.value],
 );
-const step = computed(() => 560 / Math.max(1, props.daily.days.length));
-const barWidth = computed(() => Math.max(1, Math.min(14, step.value * 0.65)));
+watch(trend, () => {
+  active.value = null;
+});
+const step = computed(() => 560 / Math.max(1, trend.value.points.length));
+const barWidth = computed(() => Math.max(1, Math.min(28, step.value * 0.65)));
+const chart = ref<SVGSVGElement | null>(null);
+const chartScale = ref(1);
+let chartObserver: ResizeObserver | undefined;
+onMounted(() => {
+  chartObserver = new ResizeObserver(([entry]) => {
+    if (!entry) return;
+    const scale = Math.min(
+      entry.contentRect.width / 620,
+      entry.contentRect.height / 215,
+    );
+    if (scale > 0) chartScale.value = scale;
+  });
+  if (chart.value) chartObserver.observe(chart.value);
+});
+// Data loading failures can remove the chart without unmounting this view.
+watch(chart, (element, previous) => {
+  if (previous) chartObserver?.unobserve(previous);
+  if (element) chartObserver?.observe(element);
+});
+onUnmounted(() => chartObserver?.disconnect());
+function barHeight(amount: number) {
+  // Keep zero invisible and positive values at least 4 CSS pixels tall after SVG scaling.
+  return amount > 0
+    ? Math.min(144, Math.max((amount / max.value) * 144, 4 / chartScale.value))
+    : 0;
+}
+const axisPoints = computed(() => {
+  const points = trend.value.points;
+  const stride = Math.max(1, Math.ceil(points.length / 6));
+  return points
+    .map((point, index) => ({ ...point, index }))
+    .filter((point) => point.index % stride === 0);
+});
+function axisMoney(cents: number) {
+  return max.value >= 1000000 && cents > 0
+    ? (cents / 1000000).toLocaleString("zh-CN", { maximumFractionDigits: 1 }) +
+        "万"
+    : money(Math.round(cents)).replace(".00", "");
+}
+function selectTrend(event: KeyboardEvent) {
+  if (
+    !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) ||
+    !trend.value.points.length
+  )
+    return;
+  event.preventDefault();
+  const last = trend.value.points.length - 1;
+  active.value =
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? last
+        : Math.max(
+            0,
+            Math.min(
+              last,
+              (active.value ?? 0) + (event.key === "ArrowLeft" ? -1 : 1),
+            ),
+          );
+}
 const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
 </script>
 <template>
@@ -37,7 +113,10 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
       <div class="insight-heading">
         <div>
           <h2>收支走势</h2>
-          <p>{{ daily.days.length }} 天 · {{ daily.activeDays }} 天有支出</p>
+          <p>
+            {{ daily.days.length }} 天 · 按{{ unitLabel }}汇总 ·
+            {{ daily.activeDays }} 天有支出
+          </p>
         </div>
         <div class="chart-legend">
           <span><i class="income-dot" />收入</span
@@ -46,33 +125,44 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
       </div>
       <div class="chart-readout" aria-live="polite">
         <template v-if="current"
-          >{{ current.date }}
+          >{{
+            current.from === current.to
+              ? current.from
+              : current.from + " 至 " + current.to
+          }}
           <span class="pos">收入 {{ money(current.income) }}</span
           ><span class="neg">支出 {{ money(current.expense) }}</span></template
         ><template v-else
-          >最高单日收支 {{ money(max) }}
-          <span>悬停或点击查看每日明细</span></template
+          >按{{ unitLabel }}查看收支
+          <span class="chart-help">悬停、点击或方向键查看金额</span></template
         >
       </div>
       <svg
+        ref="chart"
         class="flow-chart"
         viewBox="0 0 620 215"
         role="img"
-        aria-label="每日收入与支出柱状图"
+        :aria-label="
+          '按' + unitLabel + '汇总的收入与支出柱状图，使用左右方向键查看'
+        "
+        tabindex="0"
+        @keydown="selectTrend"
       >
-        <g v-for="level in [0, 1, 2, 3]" :key="level">
+        <g v-for="level in [0, 1, 2, 3, 4]" :key="level">
           <path
-            :d="'M45 ' + (25 + level * 48) + 'H605'"
+            :d="'M45 ' + (25 + level * 36) + 'H605'"
             stroke="var(--border)"
             stroke-dasharray="3 4"
           />
-          <text x="0" :y="29 + level * 48">
-            {{ money(Math.round((max * (3 - level)) / 3)).replace(".00", "") }}
+          <text x="0" :y="29 + level * 36">
+            {{ axisMoney((max * (4 - level)) / 4) }}
           </text>
         </g>
         <g
-          v-for="(day, i) in daily.days"
-          :key="day.date"
+          v-for="(day, i) in trend.points"
+          :key="day.key"
+          class="trend-point"
+          :data-period="day.key"
           @mouseenter="active = i"
           @click="active = i"
         >
@@ -81,37 +171,44 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
             y="15"
             :width="step"
             height="170"
-            fill="transparent"
+            :fill="active === i ? 'var(--surface-3)' : 'transparent'"
           />
           <rect
-            :x="45 + i * step"
-            :y="169 - (day.income / max) * 144"
+            class="income-bar"
+            :x="45 + i * step + (step - barWidth) / 2"
+            :y="169 - barHeight(day.income)"
             :width="barWidth / 2"
-            :height="(day.income / max) * 144"
+            :height="barHeight(day.income)"
             fill="var(--income)"
             rx="1"
           />
           <rect
-            :x="45 + i * step + barWidth / 2"
-            :y="169 - (day.expense / max) * 144"
+            class="expense-bar"
+            :x="45 + i * step + step / 2"
+            :y="169 - barHeight(day.expense)"
             :width="barWidth / 2"
-            :height="(day.expense / max) * 144"
-            fill="var(--primary)"
+            :height="barHeight(day.expense)"
+            fill="var(--expense)"
             rx="1"
           />
           <title>
-            {{ day.date }} 收入 {{ money(day.income) }} 支出
+            {{ day.from }} 至 {{ day.to }} 收入 {{ money(day.income) }} 支出
             {{ money(day.expense) }}
           </title>
         </g>
-        <text x="45" y="202">{{ daily.days[0]?.date.slice(5) }}</text>
-        <text x="325" y="202" text-anchor="middle">
-          {{ daily.days[Math.floor(daily.days.length / 2)]?.date.slice(5) }}
-        </text>
-        <text x="605" y="202" text-anchor="end">
-          {{ daily.days.at(-1)?.date.slice(5) }}
+        <text
+          v-for="point in axisPoints"
+          :key="point.key"
+          :x="45 + (point.index + 0.5) * step"
+          y="202"
+          text-anchor="middle"
+        >
+          {{ point.label }}
         </text>
       </svg>
+      <p class="chart-minimum-hint">
+        小额收支保留最低可见高度，具体金额以提示为准
+      </p>
     </section>
     <div class="insight-bottom">
       <section class="distribution">
@@ -120,11 +217,13 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
           <div class="direction-tabs">
             <button
               :class="{ on: direction === 'expense' }"
+              :aria-pressed="direction === 'expense'"
               @click="direction = 'expense'"
             >
               支出</button
             ><button
               :class="{ on: direction === 'income' }"
+              :aria-pressed="direction === 'income'"
               @click="direction = 'income'"
             >
               收入
@@ -191,6 +290,8 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
 }
 .insight-view {
   padding-top: 12px;
+  min-width: 0;
+  container-type: inline-size;
 }
 .insight-heading {
   display: flex;
@@ -199,10 +300,10 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
   gap: 14px;
 }
 .insight-heading h2 {
-  font-size: 14px;
+  font-size: 16px;
 }
 .insight-heading p {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--fg-3);
   margin-top: 5px;
 }
@@ -226,44 +327,58 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
   background: var(--income);
 }
 .expense-dot {
-  background: var(--primary);
+  background: var(--expense);
 }
 .chart-readout {
-  height: 42px;
+  min-height: 42px;
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   gap: 18px;
   font-size: 10px;
   color: var(--fg-2);
 }
-.chart-readout > span:last-child {
+.chart-readout .chart-help {
   color: var(--fg-3);
 }
 .flow-chart {
   width: 100%;
   height: 230px;
   display: block;
-  overflow: visible;
+  max-width: 100%;
 }
 .flow-chart text {
   fill: var(--fg-3);
   font-size: 9px;
 }
+.chart-minimum-hint {
+  color: var(--fg-3);
+  font-size: 10px;
+  margin-top: 4px;
+}
 .trend-section {
-  border-bottom: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  background: #fcfdfa;
   padding-bottom: 20px;
 }
 .insight-bottom {
   display: grid;
-  grid-template-columns: 1.05fr 1fr;
-  gap: 32px;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 24px;
   padding-top: 24px;
+}
+.insight-bottom > * {
+  min-width: 0;
 }
 .distribution-total {
   display: flex;
   align-items: baseline;
   gap: 12px;
   margin: 18px 0;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
 }
 .distribution-total > span {
   font-size: 25px;
@@ -276,23 +391,26 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
 .share-strip {
   display: flex;
   gap: 3px;
-  height: 12px;
-  border-radius: 4px;
+  height: 16px;
+  border-radius: 6px;
   overflow: hidden;
   margin-bottom: 18px;
 }
 .category-rank {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px minmax(64px, auto) 12px;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   width: 100%;
-  padding: 12px 0;
+  padding: 12px 6px;
+  border-radius: 7px;
   border-bottom: 1px solid var(--border);
   font-size: 12px;
   text-align: left;
 }
 .category-rank:hover {
   color: var(--primary);
+  background: var(--surface-2);
 }
 .rank-name {
   flex: 1;
@@ -317,7 +435,8 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
 .category-rank strong {
   font-size: 12px;
   font-weight: 500;
-  width: 75px;
+  overflow-wrap: anywhere;
+  min-width: 0;
   text-align: right;
 }
 .rank-arrow {
@@ -329,12 +448,13 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
   gap: 3px;
   background: var(--surface-3);
   padding: 3px;
-  border-radius: 6px;
+  border-radius: 9px;
+  flex-shrink: 0;
 }
 .direction-tabs button {
-  font-size: 10px;
-  padding: 4px 9px;
-  border-radius: 4px;
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 6px;
 }
 .direction-tabs .on {
   background: white;
@@ -342,13 +462,15 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
 }
 .annual-inline {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
   padding: 17px;
   background: var(--surface-2);
-  border-radius: 9px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
   margin-bottom: 20px;
   gap: 5px;
   font-size: 11px;
+  overflow-wrap: anywhere;
 }
 .annual-inline strong {
   font-size: 19px;
@@ -371,15 +493,12 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
 .activity-section :deep(.card-pad) {
   padding: 0;
 }
-.activity-section :deep(.heatmap-hint) {
-  display: none;
-}
 .activity-section :deep(.heatmap-footer) {
   font-size: 10px;
 }
-@media (max-width: 1050px) {
+@container (max-width: 650px) {
   .insight-bottom {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 26px;
   }
   .flow-chart {
@@ -391,7 +510,7 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
     font-size: 9px;
     gap: 8px;
     flex-wrap: wrap;
-    height: 46px;
+    min-height: 46px;
   }
   .flow-chart {
     height: 190px;
@@ -400,7 +519,10 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
     padding-top: 20px;
   }
   .trend-section {
-    padding-bottom: 10px;
+    padding: 14px 10px 6px;
+  }
+  .insight-heading h2 {
+    font-size: 14px;
   }
   .category-rank {
     min-height: 44px;

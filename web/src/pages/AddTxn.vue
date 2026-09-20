@@ -646,6 +646,7 @@ function calculatorKey(key: string) {
           v-for="v in ['expense', 'income', 'transfer'] as const"
           :key="v"
           :class="{ active: type === v }"
+          :aria-pressed="type === v"
           @click="setType(v)"
         >
           <AppIcon :name="v" :size="16" />{{
@@ -862,14 +863,20 @@ function calculatorKey(key: string) {
 }
 .entry-type {
   display: flex;
-  gap: 20px;
-  border-bottom: 1px solid var(--border);
+  gap: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  padding: 5px;
 }
 .entry-type button {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 12px 0;
+  padding: 10px;
+  flex: 1;
+  justify-content: center;
+  border-radius: 9px;
   font-size: 13px;
   position: relative;
   color: var(--fg-2);
@@ -877,34 +884,54 @@ function calculatorKey(key: string) {
 .entry-type button.active {
   color: var(--primary);
   font-weight: 600;
+  background: white;
+  box-shadow: 0 2px 6px #253b3310;
 }
-.entry-type button.active:after {
-  content: "";
-  position: absolute;
-  bottom: -1px;
-  height: 2px;
-  background: var(--primary);
-  left: 0;
-  right: 0;
+.entry-type button:first-child.active {
+  color: var(--expense);
+}
+.entry-type button:last-child.active {
+  color: var(--transfer);
 }
 .entry-amount {
-  padding: 24px 0;
+  padding: 22px;
+  border-radius: 16px;
+  background: var(--surface-2);
+  margin: 20px 0 24px;
+  border: 1px solid var(--border);
+  transition:
+    background-color 200ms,
+    border-color 200ms;
+}
+.entry-amount:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.entry-amount.expense {
+  background: #fcf5f0;
+}
+.entry-amount.income {
+  background: var(--income-soft);
+}
+.entry-amount.transfer {
+  background: var(--transfer-soft);
 }
 .entry-amount > label {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--fg-3);
   display: block;
   margin-bottom: 5px;
 }
 .entry-amount-value,
 .entry-amount-input {
-  font-size: 42px;
+  font-size: 44px;
   font-weight: 650;
   letter-spacing: -1.6px;
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 .entry-amount-value > span,
 .entry-amount-input > span {
@@ -931,9 +958,9 @@ function calculatorKey(key: string) {
   gap: 17px;
 }
 .entry-fields .input {
-  background: var(--surface-2);
+  background: #fcfdfa;
   border-color: var(--border);
-  font-size: 13px;
+  font-size: 14px;
 }
 .entry-fields textarea {
   resize: vertical;
@@ -974,13 +1001,13 @@ function calculatorKey(key: string) {
 .calculator-keys {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
+  gap: 6px;
   margin-top: 12px;
 }
 .calculator-keys button {
   background: var(--surface-2);
-  height: 34px;
-  border-radius: 5px;
+  height: 38px;
+  border-radius: 9px;
   font-size: 15px;
 }
 .calculator-keys button:nth-child(4n) {
@@ -993,7 +1020,9 @@ function calculatorKey(key: string) {
 .entry-save {
   position: sticky;
   bottom: 0;
-  background: white;
+  background: #ffffffef;
+  backdrop-filter: blur(8px);
+  z-index: 1;
   padding: 20px 0;
   display: flex;
   justify-content: space-between;
@@ -1052,7 +1081,8 @@ function calculatorKey(key: string) {
     padding: 18px 20px 0;
   }
   .entry-amount {
-    padding: 23px 0;
+    padding: 18px;
+    margin-block: 18px;
   }
   .entry-fields .input {
     font-size: 16px;
@@ -1070,10 +1100,10 @@ function calculatorKey(key: string) {
     gap: 10px;
   }
   .entry-type {
-    gap: 26px;
+    gap: 4px;
   }
   .entry-type button {
-    padding-top: 6px;
+    padding: 9px 7px;
   }
   .entry-amount-input input {
     font-size: 40px;

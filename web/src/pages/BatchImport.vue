@@ -860,8 +860,10 @@ onBeforeUnmount(() => {
   max-width: 100%;
 }
 .source-card {
-  padding: 24px 0;
-  border-bottom: 1px solid var(--border);
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #fcfdfa;
 }
 .source-card > summary {
   display: flex;
@@ -903,11 +905,11 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--fg-2);
 }
 .batch-import .input {
-  font-size: 12px;
+  font-size: 13px;
   padding: 9px 10px;
 }
 .action-row {
@@ -928,7 +930,8 @@ onBeforeUnmount(() => {
 }
 .batch-toolbar {
   background: var(--surface-2);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
   padding: 14px;
   margin: 16px 0;
 }
@@ -1059,12 +1062,13 @@ onBeforeUnmount(() => {
   margin: auto;
   width: min(430px, calc(100% - 32px));
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 20px;
   padding: 26px;
   box-shadow: var(--sh-3);
 }
 .import-dialog::backdrop {
-  background: #14244755;
+  background: #1b302855;
+  backdrop-filter: blur(3px);
 }
 .import-dialog p {
   font-size: 12px;
@@ -1077,6 +1081,9 @@ onBeforeUnmount(() => {
 @media (max-width: 720px) {
   .batch-import {
     padding: 18px;
+  }
+  .source-card {
+    padding: 14px;
   }
   .source-card > summary .muted {
     max-width: 120px;
@@ -1130,10 +1137,9 @@ onBeforeUnmount(() => {
 }
 @media (min-width: 1100px) {
   .import-row {
-    grid-template-columns: 24px 90px minmax(110px, 1fr) minmax(
-        90px,
-        0.85fr
-      ) 115px 105px 135px 30px;
+    grid-template-columns:
+      24px 90px minmax(110px, 1fr) minmax(90px, 0.85fr)
+      115px 105px 135px 30px;
     gap: 8px;
     padding: 14px 0;
   }

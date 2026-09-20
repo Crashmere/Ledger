@@ -547,12 +547,17 @@ onMounted(async () => {
   border-bottom: 1px solid var(--border);
 }
 .managed-account {
-  border-bottom: 1px solid var(--border);
-  padding: 10px 8px;
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  padding: 14px;
+  border-radius: 13px;
+  margin-top: 10px;
+  transition:
+    background-color var(--duration-fast),
+    border-color var(--duration-fast);
 }
 .managed-account.active {
   background: var(--primary-soft);
+  border-color: #c6d9ca;
 }
 .managed-account-select {
   display: flex;
@@ -575,14 +580,14 @@ onMounted(async () => {
   flex: 1;
 }
 .managed-account-select strong {
-  font-size: 12px;
+  font-size: 14px;
   display: block;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 .managed-account-select small {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--fg-3);
 }
 .managed-account-select b {
@@ -595,8 +600,8 @@ onMounted(async () => {
   margin-top: 6px;
 }
 .management-row-actions .icon-btn {
-  width: 26px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   font-size: 12px;
 }
 .management-categories {
@@ -637,13 +642,13 @@ onMounted(async () => {
 .managed-category strong {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   overflow-wrap: anywhere;
 }
 .managed-category .icon-btn {
-  width: 25px;
-  height: 25px;
+  width: 32px;
+  height: 32px;
   font-size: 12px;
 }
 .management-notice {

@@ -217,7 +217,7 @@ try {
   try {
     await go("/overview");
     assert(page.url().includes("/transactions"));
-    assert.equal(await page.locator(".transaction-line").count(), 50);
+    assert.equal(await page.locator(".transaction-line").count(), 10);
     for (const width of [1440, 375]) {
       await page.setViewportSize({ width, height: width === 375 ? 667 : 1000 });
       const rows = page.locator(".transaction-line.has-category");
@@ -290,7 +290,45 @@ try {
     await page.getByRole("button", { name: "下一页", exact: true }).click();
     await settle();
     assert((await page.locator(".transaction-line").count()) > 0);
-    console.log("pagination and overview redirect PASS");
+    assert.equal(
+      await page.locator('.pagination [aria-current="page"]').innerText(),
+      "2",
+    );
+    await page.getByRole("button", { name: "第 5 页", exact: true }).click();
+    await settle();
+    assert.equal(
+      await page.locator('.pagination [aria-current="page"]').innerText(),
+      "5",
+    );
+    await page.getByLabel("每页条数").selectOption("20");
+    await settle();
+    assert.equal(await page.locator(".transaction-line").count(), 20);
+    assert.equal(
+      await page.locator('.pagination [aria-current="page"]').innerText(),
+      "1",
+    );
+    assert(
+      await page
+        .getByRole("button", { name: "上一页", exact: true })
+        .isDisabled(),
+    );
+    await page.getByRole("button", { name: "第 5 页", exact: true }).click();
+    await settle();
+    assert.equal(await page.locator(".transaction-line").count(), 1);
+    assert(
+      await page
+        .getByRole("button", { name: "下一页", exact: true })
+        .isDisabled(),
+    );
+    await page.getByLabel("每页条数").selectOption("100");
+    await settle();
+    assert.equal(await page.locator(".transaction-line").count(), 81);
+    assert.equal(await page.locator(".page-number").count(), 1);
+    await page.getByLabel("每页条数").selectOption("10");
+    await settle();
+    console.log(
+      "numbered pagination, page sizes, first/last boundaries and overview redirect PASS",
+    );
     await page.getByLabel("搜索交易", { exact: true }).fill("午餐");
     await settle();
     assert((await page.locator(".transaction-line").count()) > 0);
@@ -348,6 +386,97 @@ try {
     await settle();
     assert.equal(await page.locator(".transaction-line").count(), 1);
     console.log("transfer project amount validation PASS");
+    // A one-cent bar stays distinguishable from zero beside a very large amount,
+    // including after the SVG is scaled down on a phone. Only the read response is mocked.
+    await page.route("**/api/statistics/daily", (route) =>
+      route.fulfill({
+        json: {
+          days: [
+            {
+              date: "2026-09-01",
+              time: 0,
+              income: 100000000,
+              expense: 1,
+              incomeCount: 1,
+              expenseCount: 1,
+              transferCount: 0,
+              level: 1,
+            },
+            {
+              date: "2026-09-02",
+              time: 0,
+              income: 1,
+              expense: 0,
+              incomeCount: 1,
+              expenseCount: 0,
+              transferCount: 0,
+              level: 0,
+            },
+            {
+              date: "2026-09-03",
+              time: 0,
+              income: 0,
+              expense: 0,
+              incomeCount: 0,
+              expenseCount: 0,
+              transferCount: 0,
+              level: 0,
+            },
+          ],
+          startWeekday: 2,
+          weekCount: 1,
+          total: 1,
+          activeDays: 1,
+        },
+      }),
+    );
+    await go("/reports");
+    for (const width of [1440, 375, 320, 768]) {
+      await page.setViewportSize({ width, height: width < 600 ? 667 : 1000 });
+      await settle();
+      const geometry = await page
+        .locator(".trend-point")
+        .evaluateAll((points) =>
+          points.map((point) =>
+            ["income-bar", "expense-bar"].map((name) => {
+              const bar = point.querySelector("." + name);
+              return {
+                height: bar.getBoundingClientRect().height,
+                bottom:
+                  Number(bar.getAttribute("y")) +
+                  Number(bar.getAttribute("height")),
+              };
+            }),
+          ),
+        );
+      assert(
+        geometry[0][1].height >= 3.99,
+        "Small expense minimum height at " + width,
+      );
+      assert(
+        geometry[1][0].height >= 3.99,
+        "Small income minimum height at " + width,
+      );
+      assert.equal(geometry[1][1].height, 0);
+      assert.equal(geometry[2][0].height, 0);
+      assert.equal(geometry[2][1].height, 0);
+      assert(
+        geometry.flat().every((bar) => Math.abs(bar.bottom - 169) < 0.001),
+      );
+      assert(geometry[0][0].height > geometry[0][1].height * 10);
+      await page.locator(".flow-chart").focus();
+      await page.keyboard.press("Home");
+      assert(
+        (await page.locator(".chart-readout").innerText()).includes(
+          "支出 0.01",
+        ),
+      );
+    }
+    await page.unroute("**/api/statistics/daily");
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    console.log(
+      "minimum visible income/expense heights, true zero, baseline and exact amount PASS",
+    );
     await go("/reports");
     await page.getByLabel("时间范围", { exact: true }).selectOption("year");
     await settle();
@@ -355,9 +484,81 @@ try {
     const yearDays =
       (Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1)) / 86400000;
     assert.equal(await page.locator(".heatmap-day").count(), yearDays);
+    assert.equal(await page.locator(".heatmap-month").count(), 12);
+    assert.equal(await page.locator(".trend-point").count(), 12);
+    // Check the actual content containers: document overflow alone misses a clipped workspace.
+    for (const width of [320, 375, 768, 900, 1440, 1920]) {
+      await page.setViewportSize({ width, height: width < 600 ? 667 : 1000 });
+      await settle();
+      const overflow = await page.evaluate(() => {
+        const area = document
+          .querySelector(".work-area")
+          .getBoundingClientRect();
+        return [
+          ...document.querySelectorAll(
+            ".work-area,.ledger-content,.insight-view,.insight-bottom,.distribution,.activity-section,.expense-heatmap,.heatmap-month-grid,.heatmap-month",
+          ),
+        ]
+          .filter((el) => {
+            const rect = el.getBoundingClientRect();
+            return (
+              el.scrollWidth > el.clientWidth + 1 ||
+              rect.right > area.right + 1 ||
+              rect.left < area.left - 1
+            );
+          })
+          .map((el) => el.className);
+      });
+      assert.deepEqual(overflow, [], "Year insights overflow at " + width);
+      assert.equal(await page.locator(".heatmap-day").count(), yearDays);
+      if ([375, 1440].includes(width)) {
+        await page.locator(".heatmap-month").first().scrollIntoViewIfNeeded();
+        await page.screenshot({
+          path: resolve(output, "year-insights-" + width + ".png"),
+        });
+      }
+    }
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.locator(".flow-chart").focus();
+    await page.keyboard.press("End");
+    assert(
+      (await page.locator(".chart-readout").textContent()).includes(
+        year + "-12-31",
+      ),
+    );
+    await page.getByLabel("时间范围", { exact: true }).selectOption("custom");
+    await page.getByLabel("起始日期").fill("2024-01-01");
+    await page.getByLabel("结束日期").fill("2026-12-31");
+    await settle();
+    assert.equal(await page.locator(".trend-point").count(), 3);
+    await page.getByLabel("热力图年份").selectOption("2024");
+    assert.equal(await page.locator(".heatmap-day").count(), 366);
+    const leapDay = page.locator('.heatmap-day[data-date="2024-02-29"]');
+    await leapDay.focus();
+    await page.keyboard.press("ArrowRight");
+    assert.equal(
+      await page.evaluate(() => document.activeElement.dataset.date),
+      "2024-03-01",
+    );
+    await page.keyboard.press("Home");
+    assert.equal(
+      await page.evaluate(() => document.activeElement.dataset.date),
+      "2024-01-01",
+    );
+    await page.keyboard.press("End");
+    assert.equal(
+      await page.evaluate(() => document.activeElement.dataset.date),
+      "2024-12-31",
+    );
+    await page.getByLabel("热力图年份").selectOption("2025");
+    assert.equal(await page.locator(".heatmap-day").count(), 365);
+    console.log(
+      "year insights layout, trend grouping, leap-year calendar and keyboard PASS",
+    );
     await page.getByLabel("时间范围", { exact: true }).selectOption("30d");
     await settle();
     assert.equal(await page.locator(".heatmap-day").count(), 30);
+    assert.equal(await page.locator(".trend-point").count(), 30);
     await page.getByLabel("时间范围", { exact: true }).selectOption("custom");
     await page.getByLabel("起始日期").fill(f.month + "-01");
     await page.getByLabel("结束日期").fill(f.month + "-10");
@@ -677,6 +878,73 @@ try {
     await page.screenshot({ path: resolve(output, "flow-failure.png") });
     throw e;
   }
+  // Transitions must keep controls usable, preserve filters, and honor reduced motion.
+  await go("/transactions");
+  await page.getByLabel("搜索交易").fill("午餐");
+  await settle();
+  await page.getByRole("tab", { name: "明细" }).focus();
+  await page.keyboard.press("ArrowRight");
+  await settle();
+  assert.equal(
+    await page.getByRole("tab", { name: "洞察" }).getAttribute("aria-selected"),
+    "true",
+  );
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.id),
+    "insights-tab",
+  );
+  assert.equal(await page.getByLabel("搜索交易").inputValue(), "午餐");
+  await page.keyboard.press("Home");
+  await settle();
+  assert.equal(
+    await page.getByRole("tab", { name: "明细" }).getAttribute("aria-selected"),
+    "true",
+  );
+  assert((await page.locator(".transaction-line").count()) > 0);
+  for (const reducedMotion of ["no-preference", "reduce"]) {
+    await page.emulateMedia({ reducedMotion });
+    const filterButton = page.getByRole("button", { name: /^筛选/ });
+    await filterButton.click();
+    await settle();
+    assert(await page.locator(".filter-content").isVisible());
+    await filterButton.click();
+    await page.locator(".filter-content").waitFor({ state: "detached" });
+    for (let i = 0; i < 2; i++) {
+      await page
+        .getByRole("button", { name: "记一笔", exact: true })
+        .first()
+        .click();
+      await page.getByLabel("标题", { exact: true }).waitFor();
+      if (reducedMotion === "reduce") {
+        assert.equal(
+          await page
+            .locator(".workspace-sheet")
+            .evaluate((el) => getComputedStyle(el).transitionDuration),
+          "0s",
+        );
+      }
+      await page.getByRole("button", { name: "关闭面板" }).click();
+      await page.locator(".workspace-sheet").waitFor({ state: "detached" });
+      await settle();
+      assert.equal(
+        await page.locator(".workspace-shell").getAttribute("inert"),
+        null,
+      );
+      assert.equal(await page.getByLabel("搜索交易").inputValue(), "午餐");
+    }
+    if (reducedMotion === "reduce") {
+      assert.equal(
+        await page
+          .locator(".view-content")
+          .evaluate((el) => getComputedStyle(el).animationName),
+        "none",
+      );
+    }
+  }
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  console.log(
+    "tab keyboard navigation, transitions, filters and reduced motion PASS",
+  );
   for (const width of [320, 375, 768, 1440]) {
     const p = await browser.newPage({
       viewport: { width, height: width > 720 ? 1000 : 667 },

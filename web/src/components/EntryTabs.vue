@@ -14,17 +14,25 @@ const route = useRoute();
 <style scoped>
 .entry-tabs {
   display: flex;
-  gap: 18px;
+  gap: 4px;
+  width: fit-content;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-2);
   margin-bottom: 22px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--fg-3);
 }
 .entry-tabs a {
-  padding: 5px 0;
+  padding: 8px 17px;
+  border-radius: 7px;
 }
 .entry-tabs .router-link-active {
   color: var(--primary);
   font-weight: 600;
+  background: white;
+  box-shadow: 0 1px 4px #253b3310;
 }
 .entry-tabs a:hover {
   color: var(--primary);

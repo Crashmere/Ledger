@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from "vue";
 const props = defineProps<{ label: string; busy?: boolean }>();
 const emit = defineEmits<{ close: [] }>();
 const dialog = ref<HTMLDialogElement | null>(null);
 onMounted(() => dialog.value?.showModal());
 onUnmounted(() => dialog.value?.close());
 function close() {
-  if (!props.busy) emit('close');
+  if (!props.busy) emit("close");
 }
 </script>
 <template>
@@ -28,7 +28,7 @@ function close() {
   width: min(440px, calc(100vw - 28px));
   max-height: calc(100dvh - 28px);
   border: 0;
-  border-radius: 14px;
+  border-radius: 20px;
   color: var(--fg);
   background: var(--surface);
   box-shadow: var(--sh-3);

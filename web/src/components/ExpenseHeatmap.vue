@@ -1,121 +1,197 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
-import type { DailyResult, DailyTotal } from '../api';
-import { format } from '../services/money';
-const EXPENSE_HEATMAP_LEVEL_COUNT = 8;
+import { computed, nextTick, ref, watch } from "vue";
+import type { DailyResult, DailyTotal } from "../api";
+import { format } from "../services/money";
+import { calendarMonths } from "../services/insightData";
+
 const props = defineProps<{ data: DailyResult }>();
-const heatmap = computed(() => props.data);
-const grid = ref<HTMLElement | null>(null);
-const focusedIndex = ref(0);
+const calendar = ref<HTMLElement | null>(null);
+const year = ref("");
 const activeDate = ref<string | null>(null);
-const activeDay = computed(() => heatmap.value.days.find((day) => day.date === activeDate.value));
-const levels = Array.from({ length: EXPENSE_HEATMAP_LEVEL_COUNT + 1 }, (_, level) => level);
+const focusedDate = ref("");
+const years = computed(() => [
+  ...new Set(props.data.days.map((day) => day.date.slice(0, 4))),
+]);
+const months = computed(() => calendarMonths(props.data.days, year.value));
+const visibleDays = computed(() => months.value.flatMap((month) => month.days));
+const activeDay = computed(() =>
+  visibleDays.value.find((day) => day.date === activeDate.value),
+);
+const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
+const levels = Array.from({ length: 9 }, (_, level) => level);
 const levelStyles = levels.map((level) => ({
-  background: level === 0
-    ? 'var(--surface-3)'
-    : `color-mix(in srgb, var(--expense) ${16 + 84 * (level - 1) / (EXPENSE_HEATMAP_LEVEL_COUNT - 1)}%, var(--surface))`,
+  background:
+    level === 0
+      ? "var(--surface-3)"
+      : `color-mix(in srgb, var(--expense) ${16 + (84 * (level - 1)) / 7}%, var(--surface))`,
+  color: level >= 5 ? "#fff" : "var(--fg)",
 }));
-const scaleDescription = `支出按对数分为 ${EXPENSE_HEATMAP_LEVEL_COUNT} 档，小额更细分、大额压缩；灰色表示无支出，最深色为当前范围最高支出`;
-const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-const monthLabels = computed(() => {
-  const labels: { text: string; column: number }[] = [];
-  heatmap.value.days.forEach((day, index) => {
-    const [, month, date] = day.date.split('-').map(Number);
-    if (index !== 0 && date !== 1) return;
-    const column = Math.floor((heatmap.value.startWeekday + index) / 7) + 1;
-    const previous = labels.at(-1);
-    // 月初紧贴范围起点时合并标签，避免相邻周的月份文字重叠。
-    if (previous && column - previous.column < 3) labels.pop();
-    labels.push({ text: `${month}月`, column });
-  });
-  return labels;
-});
+const scaleDescription =
+  "支出按对数分为 8 档；灰色表示无支出，最深色为整个筛选范围最高支出";
 
-watch(() => [props.data.days[0]?.date, props.data.days.at(-1)?.date], () => {
-  focusedIndex.value = 0;
+watch(
+  () => props.data.days,
+  () => {
+    if (!years.value.includes(year.value))
+      year.value = years.value.at(-1) || "";
+    activeDate.value = null;
+    focusedDate.value = visibleDays.value[0]?.date || "";
+  },
+  { immediate: true },
+);
+watch(year, () => {
   activeDate.value = null;
-  if (grid.value) grid.value.scrollLeft = 0;
+  focusedDate.value = visibleDays.value[0]?.date || "";
 });
 
-function describeDay(day: DailyTotal): string {
-  return `${day.date} · 支出 ${format(day.expense, { symbol: '¥' })} · ${day.expenseCount} 笔`;
+function describeDay(day: DailyTotal) {
+  return `${day.date} · 支出 ${format(day.expense, { symbol: "¥" })} · ${day.expenseCount} 笔`;
 }
-
-function activateDay(day: DailyTotal, index: number): void {
+function activateDay(day: DailyTotal) {
   activeDate.value = day.date;
-  focusedIndex.value = index;
+  focusedDate.value = day.date;
 }
-
-async function onDayKeydown(event: KeyboardEvent, index: number): Promise<void> {
-  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.isComposing) return;
+async function onDayKeydown(event: KeyboardEvent, day: DailyTotal) {
+  if (
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.shiftKey ||
+    event.isComposing
+  )
+    return;
+  const index = visibleDays.value.findIndex((item) => item.date === day.date);
   let target = index;
   switch (event.key) {
-    case 'ArrowLeft': target -= 7; break;
-    case 'ArrowRight': target += 7; break;
-    case 'ArrowUp': target--; break;
-    case 'ArrowDown': target++; break;
-    case 'Home': target = 0; break;
-    case 'End': target = heatmap.value.days.length - 1; break;
-    default: return;
+    case "ArrowLeft":
+      target--;
+      break;
+    case "ArrowRight":
+      target++;
+      break;
+    case "ArrowUp":
+      target -= 7;
+      break;
+    case "ArrowDown":
+      target += 7;
+      break;
+    case "Home":
+      target = 0;
+      break;
+    case "End":
+      target = visibleDays.value.length - 1;
+      break;
+    default:
+      return;
   }
   event.preventDefault();
   event.stopPropagation();
-  focusedIndex.value = Math.max(0, Math.min(heatmap.value.days.length - 1, target));
+  focusedDate.value =
+    visibleDays.value[
+      Math.max(0, Math.min(visibleDays.value.length - 1, target))
+    ]?.date || "";
   await nextTick();
-  grid.value?.querySelectorAll<HTMLButtonElement>('.heatmap-day')[focusedIndex.value]?.focus();
+  calendar.value
+    ?.querySelector<HTMLButtonElement>(`[data-date="${focusedDate.value}"]`)
+    ?.focus();
 }
 </script>
 
 <template>
   <section class="card expense-heatmap" aria-label="每日支出热力图">
     <div class="card-head heatmap-head">
-      <h3>每日支出</h3>
-      <span class="faint heatmap-hint">每格一天，颜色越深支出越多</span>
+      <div>
+        <h3>每日支出</h3>
+        <p class="heatmap-caption">每格一天 · 按月查看</p>
+      </div>
+      <select
+        v-if="years.length > 1"
+        v-model="year"
+        class="heatmap-year"
+        aria-label="热力图年份"
+      >
+        <option v-for="item in years" :key="item" :value="item">
+          {{ item }} 年
+        </option>
+      </select>
+      <span v-else class="faint">{{ year }} 年</span>
     </div>
     <div class="card-pad">
-      <div v-if="heatmap.days.length === 0" class="empty">请选择有效的日期范围</div>
+      <div v-if="!visibleDays.length" class="empty">请选择有效的日期范围</div>
       <template v-else>
-        <div class="heatmap-layout">
-          <div class="heatmap-weekdays faint" aria-hidden="true">
-            <span v-for="day in weekdays" :key="day">{{ day }}</span>
-          </div>
-          <div ref="grid" class="heatmap-scroll">
-            <div class="heatmap-calendar" :style="{ '--heatmap-weeks': heatmap.weekCount }" role="group" aria-label="每日支出，使用方向键选择日期">
-              <div class="heatmap-months faint" aria-hidden="true">
-                <span v-for="label in monthLabels" :key="label.column" :style="{ gridColumn: label.column }">{{ label.text }}</span>
-              </div>
-              <div class="heatmap-days">
-                <span v-for="n in heatmap.startWeekday" :key="'pad-' + n" aria-hidden="true"></span>
-                <button
-                  v-for="(day, index) in heatmap.days"
-                  :key="day.date"
-                  type="button"
-                  class="heatmap-day"
-                  :class="{ selected: activeDate === day.date }"
-                  :data-level="day.level"
-                  :style="levelStyles[day.level]"
-                  :data-date="day.date"
-                  :aria-label="describeDay(day)"
-                  :title="describeDay(day)"
-                  :tabindex="focusedIndex === index ? 0 : -1"
-                  @mouseenter="activeDate = day.date"
-                  @focus="activateDay(day, index)"
-                  @click="activateDay(day, index)"
-                  @keydown="onDayKeydown($event, index)"
-                ></button>
-              </div>
+        <div ref="calendar" class="heatmap-month-grid">
+          <section
+            v-for="month in months"
+            :key="month.key"
+            class="heatmap-month"
+            :aria-label="month.key + ' 每日支出'"
+          >
+            <header class="heatmap-month-heading">
+              <strong>{{ month.label }}</strong
+              ><span class="num" :title="'本月支出 ' + format(month.expense)">{{
+                format(month.expense)
+              }}</span>
+            </header>
+            <div class="heatmap-weekdays" aria-hidden="true">
+              <span v-for="day in weekdays" :key="day">{{ day }}</span>
             </div>
-          </div>
+            <div
+              class="heatmap-days"
+              role="group"
+              aria-label="使用左右键切换日期，上下键切换周"
+            >
+              <span
+                v-for="n in month.offset"
+                :key="'pad-' + n"
+                aria-hidden="true"
+              />
+              <button
+                v-for="day in month.days"
+                :key="day.date"
+                type="button"
+                class="heatmap-day"
+                :class="{ selected: activeDate === day.date }"
+                :style="levelStyles[day.level]"
+                :data-level="day.level"
+                :data-date="day.date"
+                :aria-label="describeDay(day)"
+                :title="describeDay(day)"
+                :tabindex="focusedDate === day.date ? 0 : -1"
+                @mouseenter="activeDate = day.date"
+                @focus="activateDay(day)"
+                @click="activateDay(day)"
+                @keydown="onDayKeydown($event, day)"
+              >
+                {{ Number(day.date.slice(8)) }}
+              </button>
+            </div>
+          </section>
         </div>
         <div class="heatmap-detail num" role="status">
-          {{ activeDay ? describeDay(activeDay) : heatmap.activeDays ? '悬停或点击方块查看当天支出' : '当前范围暂无支出' }}
+          {{
+            activeDay
+              ? describeDay(activeDay)
+              : "点击日期或使用方向键查看当天支出"
+          }}
         </div>
         <div class="heatmap-footer">
-          <span class="muted">{{ heatmap.activeDays }} 天有支出 · 合计 <b class="num">{{ format(heatmap.total, { symbol: '¥' }) }}</b></span>
-          <div class="heatmap-scale faint" :aria-label="scaleDescription" :title="scaleDescription">
-            <span>对数 · 少</span>
-            <span v-for="level in levels" :key="level" class="heatmap-swatch" :data-level="level" :style="levelStyles[level]" aria-hidden="true"></span>
-            <span>多</span>
+          <span class="muted"
+            >当前筛选 {{ data.activeDays }} 天有支出 · 合计
+            <b class="num">{{ format(data.total, { symbol: "¥" }) }}</b></span
+          >
+          <div
+            class="heatmap-scale faint"
+            :aria-label="scaleDescription"
+            :title="scaleDescription"
+          >
+            <span>少</span
+            ><span
+              v-for="level in levels"
+              :key="level"
+              class="heatmap-swatch"
+              :style="levelStyles[level]"
+              aria-hidden="true"
+            /><span>多</span>
           </div>
         </div>
       </template>
@@ -125,53 +201,116 @@ async function onDayKeydown(event: KeyboardEvent, index: number): Promise<void> 
 
 <style scoped>
 .expense-heatmap {
-  --heatmap-cell: 14px;
-  --heatmap-gap: 4px;
   min-width: 0;
+  max-width: 100%;
 }
-.heatmap-head { flex-wrap: wrap; gap: 8px; }
-.heatmap-hint { font-size: var(--fs-xs); }
-.heatmap-layout { display: flex; gap: 10px; min-width: 0; }
-.heatmap-weekdays {
+.heatmap-head {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.heatmap-caption {
+  font-size: 11px;
+  color: var(--fg-3);
+  margin-top: 5px;
+}
+.heatmap-year {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: var(--surface);
+  font-size: 12px;
+  max-width: 100%;
+}
+.heatmap-month-grid {
   display: grid;
-  grid-template-rows: repeat(7, var(--heatmap-cell));
-  gap: var(--heatmap-gap);
-  flex: 0 0 16px;
-  margin-top: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 125px), 1fr));
+  gap: 18px 14px;
+}
+.heatmap-month {
+  min-width: 0;
+  max-width: 220px;
+}
+.heatmap-month-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.heatmap-month-heading > span {
   font-size: 10px;
-  line-height: var(--heatmap-cell);
+  color: var(--fg-3);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.heatmap-scroll { min-width: 0; max-width: 100%; overflow-x: auto; padding: 2px; }
-.heatmap-calendar { width: max-content; }
-.heatmap-months {
-  display: grid;
-  grid-template-columns: repeat(var(--heatmap-weeks), var(--heatmap-cell));
-  column-gap: var(--heatmap-gap);
-  height: 22px;
-  font-size: var(--fs-xs);
-}
-.heatmap-months span { white-space: nowrap; }
+.heatmap-weekdays,
 .heatmap-days {
   display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(7, var(--heatmap-cell));
-  grid-template-columns: repeat(var(--heatmap-weeks), var(--heatmap-cell));
-  gap: var(--heatmap-gap);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
 }
-.heatmap-day, .heatmap-swatch {
-  width: var(--heatmap-cell);
-  height: var(--heatmap-cell);
-  border-radius: 3px;
-  background: var(--surface-3);
+.heatmap-weekdays {
+  text-align: center;
+  color: var(--fg-3);
+  font-size: 9px;
+  margin-bottom: 5px;
 }
-.heatmap-day.selected { box-shadow: inset 0 0 0 1px var(--fg-2); }
-.heatmap-detail { margin-top: 14px; font-size: var(--fs-xs); color: var(--fg-2); overflow-wrap: anywhere; }
-.heatmap-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; font-size: var(--fs-sm); }
-.heatmap-scale { display: flex; align-items: center; gap: 4px; font-size: var(--fs-xs); }
-.heatmap-scale > span:first-child { margin-right: 3px; }
-.heatmap-scale > span:last-child { margin-left: 3px; }
-@media (max-width: 720px) {
-  .expense-heatmap { --heatmap-cell: 18px; }
-  .card-pad { padding: 16px; }
+.heatmap-day {
+  aspect-ratio: 1;
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+.heatmap-day.selected {
+  box-shadow: inset 0 0 0 1px var(--fg);
+}
+.heatmap-day:focus-visible {
+  outline-offset: 1px;
+  position: relative;
+  z-index: 1;
+}
+.heatmap-detail {
+  margin-top: 16px;
+  min-height: 2.5em;
+  font-size: 11px;
+  color: var(--fg-2);
+  overflow-wrap: anywhere;
+}
+.heatmap-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.heatmap-scale {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+}
+.heatmap-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+@media (max-width: 600px) {
+  .heatmap-month-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 12px;
+  }
+  .heatmap-year {
+    font-size: 16px;
+  }
 }
 </style>
