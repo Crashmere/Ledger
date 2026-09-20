@@ -8,6 +8,7 @@ const paths: Record<string, string> = {
   plus: 'M12 5v14M5 12h14',
   search: 'M21 21l-5-5m2-6a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z',
   batch: 'M8 3h12v14H8zM4 7v14h12M11 7h6m-6 4h6',
+  menu: 'M4 6h16M4 12h16M4 18h16',
   arrow: 'M5 12h14m-5-5 5 5-5 5',
   back: 'm14 6-6 6 6 6',
   close: 'm6 6 12 12M6 18 18 6',

@@ -24,6 +24,7 @@ import { useSaveGuard } from "../composables/useSaveGuard";
 import { beijingDate, shiftDay, dayLabel } from "../services/dates";
 import { money, color, typeName, txnAmount } from "../services/presentation";
 import AppIcon from "../components/AppIcon.vue";
+import WorkspaceMenu from "../components/WorkspaceMenu.vue";
 import FilterPanel from "../components/FilterPanel.vue";
 import InsightView from "../components/InsightView.vue";
 import MonthSwitch from "../components/MonthSwitch.vue";
@@ -740,6 +741,7 @@ onUnmounted(() => {
           </option>
         </select>
         <div class="appbar-actions">
+          <WorkspaceMenu @manage="navigate('manage')" />
           <span class="cloud-state"><i />已连接</span
           ><button class="btn btn-ghost" @click="navigate('manage')">
             <AppIcon name="accounts" />管理账户</button
