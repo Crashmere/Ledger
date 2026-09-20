@@ -67,7 +67,10 @@ function describeDay(day: DailyTotal) {
     <div class="card-pad">
       <div v-if="!visibleDays.length" class="empty">请选择有效的日期范围</div>
       <template v-else>
-        <div class="heatmap-month-grid">
+        <div
+          class="heatmap-month-grid"
+          :class="{ 'heatmap-month-grid--single': months.length === 1 }"
+        >
           <section
             v-for="month in months"
             :key="month.key"
@@ -207,6 +210,32 @@ function describeDay(day: DailyTotal) {
   font-size: 9px;
   font-variant-numeric: tabular-nums;
 }
+.heatmap-month-grid--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+.heatmap-month-grid--single .heatmap-month {
+  max-width: none;
+}
+.heatmap-month-grid--single .heatmap-month-heading {
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+.heatmap-month-grid--single .heatmap-month-heading > span {
+  font-size: 12px;
+}
+.heatmap-month-grid--single .heatmap-weekdays,
+.heatmap-month-grid--single .heatmap-days {
+  gap: 6px;
+}
+.heatmap-month-grid--single .heatmap-weekdays {
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+.heatmap-month-grid--single .heatmap-day {
+  max-height: 56px;
+  border-radius: 6px;
+  font-size: 13px;
+}
 .heatmap-detail {
   margin-top: 16px;
   min-height: 2.5em;
@@ -236,7 +265,7 @@ function describeDay(day: DailyTotal) {
   border-radius: 2px;
 }
 @media (max-width: 600px) {
-  .heatmap-month-grid {
+  .heatmap-month-grid:not(.heatmap-month-grid--single) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 18px 12px;
   }
