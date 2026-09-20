@@ -121,6 +121,9 @@ const feedback = ref<{ kind: "success" | "error"; msg: string } | null>(null);
 let feedbackTimer: ReturnType<typeof setTimeout> | null = null;
 
 const amountInputEl = ref<HTMLInputElement | null>(null);
+const amountDisplayEl = ref<HTMLElement | null>(null);
+const titleInputEl = ref<HTMLInputElement | null>(null);
+const noteInputEl = ref<HTMLTextAreaElement | null>(null);
 
 const toAccountOptions = computed(() =>
   accounts.value.filter((a) => a.id !== accountId.value),
@@ -436,15 +439,39 @@ function copyCurrent(): void {
   });
 }
 
+function cycleEntryFields(e: KeyboardEvent): void {
+  if (e.key !== "Tab") return;
+  if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.isComposing)
+    return;
+  if (saving.value || deleting.value || document.querySelector("dialog[open]"))
+    return;
+  // Handle this before the sheet's focus trap and native control traversal.
+  e.preventDefault();
+  e.stopPropagation();
+  const fields = [
+    isMobile.value ? amountInputEl.value : amountDisplayEl.value,
+    titleInputEl.value,
+    noteInputEl.value,
+  ].filter((field): field is HTMLElement => field !== null);
+  const current = fields.indexOf(document.activeElement as HTMLElement);
+  const next =
+    current < 0
+      ? e.shiftKey
+        ? fields.length - 1
+        : 0
+      : (current + (e.shiftKey ? -1 : 1) + fields.length) % fields.length;
+  fields[next]?.focus();
+}
+
 function onKeydown(e: KeyboardEvent): void {
   if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.isComposing)
     return;
-  if (saving.value || syncTransactionId.value || showSaveError.value) return;
-  // 手机使用原生输入与焦点行为，不接管 Tab、数字键或 Enter 保存。
+  if (saving.value || deleting.value || document.querySelector("dialog[open]"))
+    return;
+  // 手机保留原生金额输入，不接管数字键或 Enter 保存。
   if (isMobile.value) return;
   const el = e.target as HTMLElement | null;
 
-  if (e.key === "Tab") return;
   if (el?.closest("button,select,a,dialog")) return;
   if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
   if (e.key === "Escape") {
@@ -568,6 +595,7 @@ function retryInitialization(): void {
 
 onMounted(() => {
   void initForm();
+  window.addEventListener("keydown", cycleEntryFields, true);
   window.addEventListener("keydown", onKeydown);
   document.addEventListener("click", dismissAmountKeyboard);
   window.addEventListener("ledger-reload", retryInitialization);
@@ -578,6 +606,7 @@ watch([editingId, copyingId], () => {
 });
 
 onUnmounted(() => {
+  window.removeEventListener("keydown", cycleEntryFields, true);
   window.removeEventListener("keydown", onKeydown);
   document.removeEventListener("click", dismissAmountKeyboard);
   window.removeEventListener("ledger-reload", retryInitialization);
@@ -674,6 +703,7 @@ function calculatorKey(key: string) {
         </div>
         <div
           v-else
+          ref="amountDisplayEl"
           role="group"
           aria-label="金额"
           tabindex="0"
@@ -691,6 +721,7 @@ function calculatorKey(key: string) {
           <label class="field-label" for="txn-title">标题</label
           ><input
             id="txn-title"
+            ref="titleInputEl"
             v-model="title"
             class="input"
             placeholder="这笔钱用在了哪里？"
@@ -701,6 +732,7 @@ function calculatorKey(key: string) {
             >备注 <span>选填</span></label
           ><textarea
             id="txn-note"
+            ref="noteInputEl"
             v-model="note"
             class="input"
             rows="2"
@@ -902,10 +934,6 @@ function calculatorKey(key: string) {
   transition:
     background-color 200ms,
     border-color 200ms;
-}
-.entry-amount:focus-within {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--ring);
 }
 .entry-amount.expense {
   background: #fcf5f0;

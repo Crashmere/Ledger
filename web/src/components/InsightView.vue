@@ -83,27 +83,6 @@ function axisMoney(cents: number) {
         "万"
     : money(Math.round(cents)).replace(".00", "");
 }
-function selectTrend(event: KeyboardEvent) {
-  if (
-    !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) ||
-    !trend.value.points.length
-  )
-    return;
-  event.preventDefault();
-  const last = trend.value.points.length - 1;
-  active.value =
-    event.key === "Home"
-      ? 0
-      : event.key === "End"
-        ? last
-        : Math.max(
-            0,
-            Math.min(
-              last,
-              (active.value ?? 0) + (event.key === "ArrowLeft" ? -1 : 1),
-            ),
-          );
-}
 const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
 </script>
 <template>
@@ -134,7 +113,7 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
           ><span class="neg">支出 {{ money(current.expense) }}</span></template
         ><template v-else
           >按{{ unitLabel }}查看收支
-          <span class="chart-help">悬停、点击或方向键查看金额</span></template
+          <span class="chart-help">悬停或点击查看金额</span></template
         >
       </div>
       <svg
@@ -142,11 +121,7 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
         class="flow-chart"
         viewBox="0 0 620 215"
         role="img"
-        :aria-label="
-          '按' + unitLabel + '汇总的收入与支出柱状图，使用左右方向键查看'
-        "
-        tabindex="0"
-        @keydown="selectTrend"
+        :aria-label="'按' + unitLabel + '汇总的收入与支出柱状图'"
       >
         <g v-for="level in [0, 1, 2, 3, 4]" :key="level">
           <path

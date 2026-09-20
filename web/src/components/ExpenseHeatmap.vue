@@ -1,14 +1,12 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import type { DailyResult, DailyTotal } from "../api";
 import { format } from "../services/money";
 import { calendarMonths } from "../services/insightData";
 
 const props = defineProps<{ data: DailyResult }>();
-const calendar = ref<HTMLElement | null>(null);
 const year = ref("");
 const activeDate = ref<string | null>(null);
-const focusedDate = ref("");
 const years = computed(() => [
   ...new Set(props.data.days.map((day) => day.date.slice(0, 4))),
 ]);
@@ -35,65 +33,15 @@ watch(
     if (!years.value.includes(year.value))
       year.value = years.value.at(-1) || "";
     activeDate.value = null;
-    focusedDate.value = visibleDays.value[0]?.date || "";
   },
   { immediate: true },
 );
 watch(year, () => {
   activeDate.value = null;
-  focusedDate.value = visibleDays.value[0]?.date || "";
 });
 
 function describeDay(day: DailyTotal) {
   return `${day.date} · 支出 ${format(day.expense, { symbol: "¥" })} · ${day.expenseCount} 笔`;
-}
-function activateDay(day: DailyTotal) {
-  activeDate.value = day.date;
-  focusedDate.value = day.date;
-}
-async function onDayKeydown(event: KeyboardEvent, day: DailyTotal) {
-  if (
-    event.altKey ||
-    event.ctrlKey ||
-    event.metaKey ||
-    event.shiftKey ||
-    event.isComposing
-  )
-    return;
-  const index = visibleDays.value.findIndex((item) => item.date === day.date);
-  let target = index;
-  switch (event.key) {
-    case "ArrowLeft":
-      target--;
-      break;
-    case "ArrowRight":
-      target++;
-      break;
-    case "ArrowUp":
-      target -= 7;
-      break;
-    case "ArrowDown":
-      target += 7;
-      break;
-    case "Home":
-      target = 0;
-      break;
-    case "End":
-      target = visibleDays.value.length - 1;
-      break;
-    default:
-      return;
-  }
-  event.preventDefault();
-  event.stopPropagation();
-  focusedDate.value =
-    visibleDays.value[
-      Math.max(0, Math.min(visibleDays.value.length - 1, target))
-    ]?.date || "";
-  await nextTick();
-  calendar.value
-    ?.querySelector<HTMLButtonElement>(`[data-date="${focusedDate.value}"]`)
-    ?.focus();
 }
 </script>
 
@@ -119,7 +67,7 @@ async function onDayKeydown(event: KeyboardEvent, day: DailyTotal) {
     <div class="card-pad">
       <div v-if="!visibleDays.length" class="empty">请选择有效的日期范围</div>
       <template v-else>
-        <div ref="calendar" class="heatmap-month-grid">
+        <div class="heatmap-month-grid">
           <section
             v-for="month in months"
             :key="month.key"
@@ -135,11 +83,7 @@ async function onDayKeydown(event: KeyboardEvent, day: DailyTotal) {
             <div class="heatmap-weekdays" aria-hidden="true">
               <span v-for="day in weekdays" :key="day">{{ day }}</span>
             </div>
-            <div
-              class="heatmap-days"
-              role="group"
-              aria-label="使用左右键切换日期，上下键切换周"
-            >
+            <div class="heatmap-days" role="group" aria-label="每日支出日期">
               <span
                 v-for="n in month.offset"
                 :key="'pad-' + n"
@@ -150,17 +94,14 @@ async function onDayKeydown(event: KeyboardEvent, day: DailyTotal) {
                 :key="day.date"
                 type="button"
                 class="heatmap-day"
-                :class="{ selected: activeDate === day.date }"
                 :style="levelStyles[day.level]"
                 :data-level="day.level"
                 :data-date="day.date"
                 :aria-label="describeDay(day)"
                 :title="describeDay(day)"
-                :tabindex="focusedDate === day.date ? 0 : -1"
+                tabindex="-1"
                 @mouseenter="activeDate = day.date"
-                @focus="activateDay(day)"
-                @click="activateDay(day)"
-                @keydown="onDayKeydown($event, day)"
+                @click="activeDate = day.date"
               >
                 {{ Number(day.date.slice(8)) }}
               </button>
@@ -169,9 +110,7 @@ async function onDayKeydown(event: KeyboardEvent, day: DailyTotal) {
         </div>
         <div class="heatmap-detail num" role="status">
           {{
-            activeDay
-              ? describeDay(activeDay)
-              : "点击日期或使用方向键查看当天支出"
+            activeDay ? describeDay(activeDay) : "悬停或点击日期查看当天支出"
           }}
         </div>
         <div class="heatmap-footer">
@@ -267,14 +206,6 @@ async function onDayKeydown(event: KeyboardEvent, day: DailyTotal) {
   border-radius: 4px;
   font-size: 9px;
   font-variant-numeric: tabular-nums;
-}
-.heatmap-day.selected {
-  box-shadow: inset 0 0 0 1px var(--fg);
-}
-.heatmap-day:focus-visible {
-  outline-offset: 1px;
-  position: relative;
-  z-index: 1;
 }
 .heatmap-detail {
   margin-top: 16px;

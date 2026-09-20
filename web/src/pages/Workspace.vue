@@ -503,6 +503,7 @@ watch(isSheet, async (open) => {
   }
 });
 function trapSheet(e: KeyboardEvent) {
+  if (e.defaultPrevented) return;
   if (e.key === "Escape") {
     e.preventDefault();
     e.stopPropagation();
@@ -525,17 +526,41 @@ function trapSheet(e: KeyboardEvent) {
   }
 }
 function globalKey(e: KeyboardEvent) {
-  if (connectionUnavailable.value) return;
-  if (e.altKey && e.code === "KeyN" && !isSheet.value && !detail.value?.open) {
+  if (
+    e.defaultPrevented ||
+    e.isComposing ||
+    connectionUnavailable.value ||
+    isSheet.value ||
+    document.querySelector("dialog[open]")
+  )
+    return;
+  if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyN") {
     e.preventDefault();
     navigate("add");
+    return;
   }
-  if (
-    e.key === "/" &&
-    !isSheet.value &&
-    !detail.value?.open &&
-    !(e.target as HTMLElement)?.closest("input,textarea,select")
-  ) {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "Tab") {
+    e.preventDefault();
+    e.stopPropagation();
+    view.value = view.value === "list" ? "insights" : "list";
+    // Switch the view without moving focus through the page's controls.
+    (document.activeElement as HTMLElement | null)?.blur();
+    return;
+  }
+  const target = e.target as HTMLElement | null;
+  const editing =
+    target?.closest("input,textarea") || target?.isContentEditable;
+  if (!e.shiftKey && ["ArrowLeft", "ArrowRight"].includes(e.key) && !editing) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (range.value === "month") {
+      if (e.key === "ArrowLeft") month.prevMonth();
+      else month.nextMonth();
+    }
+    return;
+  }
+  if (e.key === "/" && !editing && !target?.closest("select")) {
     e.preventDefault();
     document.querySelector<HTMLInputElement>("#workspace-search")?.focus();
   }
@@ -598,22 +623,6 @@ function drilldown(name: string) {
   selectedTypes.value = [direction.value];
   view.value = "list";
 }
-function switchViewKey(event: KeyboardEvent) {
-  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-  event.preventDefault();
-  view.value =
-    event.key === "Home"
-      ? "list"
-      : event.key === "End"
-        ? "insights"
-        : view.value === "list"
-          ? "insights"
-          : "list";
-  const tabs = (
-    event.currentTarget as HTMLElement
-  ).querySelectorAll<HTMLButtonElement>('[role="tab"]');
-  tabs[view.value === "list" ? 0 : 1]?.focus();
-}
 const checking = ref(false);
 async function reconnect() {
   checking.value = true;
@@ -646,13 +655,13 @@ onMounted(() => {
       recent.value = value.filter((v) => typeof v === "string").slice(0, 8);
   } catch {}
   void initialize();
-  window.addEventListener("keydown", globalKey);
+  window.addEventListener("keydown", globalKey, true);
   window.addEventListener("offline", offline);
 });
 onUnmounted(() => {
   request++;
   clearTimeout(timer);
-  window.removeEventListener("keydown", globalKey);
+  window.removeEventListener("keydown", globalKey, true);
   window.removeEventListener("offline", offline);
 });
 </script>
@@ -880,13 +889,12 @@ onUnmounted(() => {
                   role="tablist"
                   aria-label="账本视图"
                   :class="{ 'show-insights': view === 'insights' }"
-                  @keydown="switchViewKey"
                 >
                   <button
                     id="list-tab"
                     role="tab"
                     aria-controls="ledger-view"
-                    :tabindex="view === 'list' ? 0 : -1"
+                    tabindex="-1"
                     :aria-selected="view === 'list'"
                     :class="{ on: view === 'list' }"
                     @click="view = 'list'"
@@ -896,7 +904,7 @@ onUnmounted(() => {
                     id="insights-tab"
                     role="tab"
                     aria-controls="ledger-view"
-                    :tabindex="view === 'insights' ? 0 : -1"
+                    tabindex="-1"
                     :aria-selected="view === 'insights'"
                     :class="{ on: view === 'insights' }"
                     @click="view = 'insights'"

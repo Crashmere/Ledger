@@ -464,8 +464,7 @@ try {
         geometry.flat().every((bar) => Math.abs(bar.bottom - 169) < 0.001),
       );
       assert(geometry[0][0].height > geometry[0][1].height * 10);
-      await page.locator(".flow-chart").focus();
-      await page.keyboard.press("Home");
+      await page.locator(".trend-point").first().click();
       assert(
         (await page.locator(".chart-readout").innerText()).includes(
           "支出 0.01",
@@ -519,8 +518,7 @@ try {
       }
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.locator(".flow-chart").focus();
-    await page.keyboard.press("End");
+    await page.locator(".trend-point").last().click();
     assert(
       (await page.locator(".chart-readout").textContent()).includes(
         year + "-12-31",
@@ -534,26 +532,34 @@ try {
     await page.getByLabel("热力图年份").selectOption("2024");
     assert.equal(await page.locator(".heatmap-day").count(), 366);
     const leapDay = page.locator('.heatmap-day[data-date="2024-02-29"]');
-    await leapDay.focus();
-    await page.keyboard.press("ArrowRight");
+    await leapDay.click();
+    for (const key of [
+      "ArrowRight",
+      "ArrowLeft",
+      "ArrowDown",
+      "ArrowUp",
+      "Home",
+      "End",
+    ]) {
+      await page.keyboard.press(key);
+      assert.equal(
+        await page.evaluate(() => document.activeElement.dataset.date),
+        "2024-02-29",
+      );
+      assert(
+        (await page.locator(".heatmap-detail").textContent()).includes(
+          "2024-02-29",
+        ),
+      );
+    }
     assert.equal(
-      await page.evaluate(() => document.activeElement.dataset.date),
-      "2024-03-01",
-    );
-    await page.keyboard.press("Home");
-    assert.equal(
-      await page.evaluate(() => document.activeElement.dataset.date),
-      "2024-01-01",
-    );
-    await page.keyboard.press("End");
-    assert.equal(
-      await page.evaluate(() => document.activeElement.dataset.date),
-      "2024-12-31",
+      await leapDay.evaluate((el) => getComputedStyle(el).boxShadow),
+      "none",
     );
     await page.getByLabel("热力图年份").selectOption("2025");
     assert.equal(await page.locator(".heatmap-day").count(), 365);
     console.log(
-      "year insights layout, trend grouping, leap-year calendar and keyboard PASS",
+      "year insights layout, trend grouping, leap-year calendar and no keyboard selection PASS",
     );
     await page.getByLabel("时间范围", { exact: true }).selectOption("30d");
     await settle();
@@ -878,23 +884,163 @@ try {
     await page.screenshot({ path: resolve(output, "flow-failure.png") });
     throw e;
   }
+  // Page shortcuts never traverse unrelated controls or intercept modal/input editing.
+  for (const width of [1440, 375]) {
+    await page.setViewportSize({ width, height: width === 375 ? 667 : 1000 });
+    await go("/transactions");
+    const initialMonth = await page.locator(".m-label").innerText();
+    const search = page.getByLabel("搜索交易", { exact: true });
+    await search.fill("午餐");
+    await search.evaluate((el) => el.setSelectionRange(2, 2));
+    await page.keyboard.press("ArrowLeft");
+    assert.equal(await search.evaluate((el) => el.selectionStart), 1);
+    assert.equal(await page.locator(".m-label").innerText(), initialMonth);
+    await page.keyboard.press("Tab");
+    await settle();
+    assert.equal(
+      await page
+        .getByRole("tab", { name: "洞察" })
+        .getAttribute("aria-selected"),
+      "true",
+    );
+    assert(await page.evaluate(() => document.activeElement === document.body));
+    assert.equal(await search.inputValue(), "午餐");
+    // A clicked tab or calendar day must not steal month shortcuts.
+    await page.getByRole("tab", { name: "洞察" }).focus();
+    await page.keyboard.press("ArrowLeft");
+    await settle();
+    assert.notEqual(await page.locator(".m-label").innerText(), initialMonth);
+    assert.equal(
+      await page
+        .getByRole("tab", { name: "洞察" })
+        .getAttribute("aria-selected"),
+      "true",
+    );
+    await page.locator(".heatmap-day").first().click();
+    await page.keyboard.press("ArrowRight");
+    await settle();
+    assert.equal(await page.locator(".m-label").innerText(), initialMonth);
+    await page.keyboard.press("Shift+Tab");
+    await settle();
+    assert.equal(
+      await page
+        .getByRole("tab", { name: "明细" })
+        .getAttribute("aria-selected"),
+      "true",
+    );
+    await page.locator(".transaction-line").first().click();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("ArrowLeft");
+    assert(
+      await page
+        .locator("dialog[open]")
+        .evaluate((el) => el.contains(document.activeElement)),
+    );
+    assert.equal(await page.locator(".m-label").innerText(), initialMonth);
+    assert.equal(
+      await page
+        .getByRole("tab", { name: "明细" })
+        .getAttribute("aria-selected"),
+      "true",
+    );
+    await page.getByLabel("关闭详情", { exact: true }).click();
+    const dateRead = page.waitForResponse((r) =>
+      r.url().endsWith("/api/statistics/daily"),
+    );
+    await page.getByRole("button", { name: /^筛选/ }).focus();
+    await page.keyboard.press("Tab");
+    await dateRead;
+    await settle();
+    assert(await page.evaluate(() => document.activeElement === document.body));
+    await page.keyboard.press("Tab");
+    await settle();
+    await go("/add?account=" + f.accounts[0].id);
+    const amount =
+      width === 375
+        ? page.getByLabel("金额（元）", { exact: true })
+        : page.getByRole("group", { name: "金额", exact: true });
+    const title = page.getByLabel("标题", { exact: true });
+    const note = page.locator("#txn-note");
+    const focused = async (locator) =>
+      assert(await locator.evaluate((el) => el === document.activeElement));
+    await page.getByLabel("关闭面板", { exact: true }).focus();
+    await page.keyboard.press("Tab");
+    await focused(amount);
+    await page.keyboard.type("12.34");
+    await page.keyboard.press("Tab");
+    await focused(title);
+    await page.keyboard.type("键盘草稿");
+    await page.keyboard.press("Tab");
+    await focused(note);
+    await page.keyboard.type("备注草稿");
+    await page.keyboard.press("ArrowLeft");
+    assert.equal(await note.evaluate((el) => el.selectionStart), 3);
+    await page.keyboard.press("Tab");
+    await focused(amount);
+    await page.keyboard.press("Shift+Tab");
+    await focused(note);
+    await page.keyboard.press("Shift+Tab");
+    await focused(title);
+    await page.keyboard.press("Shift+Tab");
+    await focused(amount);
+    await page.getByLabel("账户", { exact: true }).focus();
+    await page.keyboard.press("Tab");
+    await focused(amount);
+    await page.getByLabel("关闭面板", { exact: true }).focus();
+    await page.keyboard.press("Shift+Tab");
+    await focused(note);
+    for (const field of [amount, title, note]) {
+      await field.focus();
+      const style = await field.evaluate((el) => {
+        const styles = getComputedStyle(el);
+        return { outline: styles.outlineStyle, shadow: styles.boxShadow };
+      });
+      assert.deepEqual(style, { outline: "none", shadow: "none" });
+    }
+    assert.equal(
+      await page
+        .locator(".entry-amount")
+        .evaluate((el) => getComputedStyle(el).boxShadow),
+      "none",
+    );
+    assert.equal(await title.inputValue(), "键盘草稿");
+    assert.equal(await note.inputValue(), "备注草稿");
+    assert.equal(await page.locator(".m-label").innerText(), initialMonth);
+    if (width === 375) assert.equal(await amount.inputValue(), "12.34");
+    else assert((await amount.innerText()).includes("12.34"));
+    await page.getByLabel("关闭面板", { exact: true }).click();
+    await settle();
+    await page.keyboard.press("Tab");
+    await settle();
+    assert.equal(
+      await page
+        .getByRole("tab", { name: "洞察" })
+        .getAttribute("aria-selected"),
+      "true",
+    );
+    console.log(
+      "page shortcuts, field cycle, modal isolation and no focus highlights PASS " +
+        width,
+    );
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
   // Transitions must keep controls usable, preserve filters, and honor reduced motion.
   await go("/transactions");
   await page.getByLabel("搜索交易").fill("午餐");
   await settle();
   await page.getByRole("tab", { name: "明细" }).focus();
-  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Tab");
   await settle();
   assert.equal(
     await page.getByRole("tab", { name: "洞察" }).getAttribute("aria-selected"),
     "true",
   );
   assert.equal(
-    await page.evaluate(() => document.activeElement?.id),
-    "insights-tab",
+    await page.evaluate(() => document.activeElement === document.body),
+    true,
   );
   assert.equal(await page.getByLabel("搜索交易").inputValue(), "午餐");
-  await page.keyboard.press("Home");
+  await page.keyboard.press("Shift+Tab");
   await settle();
   assert.equal(
     await page.getByRole("tab", { name: "明细" }).getAttribute("aria-selected"),
