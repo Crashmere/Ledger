@@ -196,6 +196,7 @@ watch(loading, (pending) => {
 });
 const initialized = ref(false);
 const error = ref("");
+const refreshError = ref("");
 const direction = ref<"expense" | "income">("expense");
 const filtersOpen = ref(false);
 let request = 0;
@@ -264,10 +265,16 @@ async function loadDaily(
     return { data: empty, error: (e as Error).message };
   }
 }
-async function load(stats = true) {
+function keepUnchanged<T>(previous: T, next: T): T {
+  return JSON.stringify(previous) === JSON.stringify(next) ? previous : next;
+}
+async function load(stats = true, background = false) {
   const id = ++request;
-  loading.value = true;
-  error.value = "";
+  if (!background) {
+    loading.value = true;
+    error.value = "";
+    refreshError.value = "";
+  }
   try {
     const f = filter.value;
     const [result, sum, cats, days] = await Promise.all([
@@ -290,15 +297,26 @@ async function load(stats = true) {
         : Promise.resolve({ data: daily.value, error: dailyError.value }),
     ]);
     if (id !== request) return;
-    transactions.value = result.items;
+    error.value = "";
+    refreshError.value = "";
+    transactions.value = keepUnchanged(transactions.value, result.items);
     totalCount.value = result.totalCount;
-    dayTotals.value = result.dayTotals ?? {};
-    summary.value = sum;
-    categoryTotals.value = cats;
-    daily.value = days.data;
-    dailyError.value = days.error;
+    dayTotals.value = keepUnchanged(dayTotals.value, result.dayTotals ?? {});
+    summary.value = keepUnchanged(summary.value, sum);
+    categoryTotals.value = keepUnchanged(categoryTotals.value, cats);
+    if (background && days.error) {
+      refreshError.value = "图表更新失败，仍显示上次数据：" + days.error;
+    } else {
+      daily.value = keepUnchanged(daily.value, days.data);
+      dailyError.value = days.error;
+    }
   } catch (e) {
     if (id === request) {
+      if (background) {
+        refreshError.value =
+          "更新失败，仍显示上次数据：" + (e as Error).message;
+        return;
+      }
       error.value = (e as Error).message;
       transactions.value = [];
       totalCount.value = 0;
@@ -317,26 +335,37 @@ async function load(stats = true) {
     if (id === request) loading.value = false;
   }
 }
-async function initialize() {
+async function initialize(background = false) {
+  const id = ++request;
   try {
-    error.value = "";
+    if (!background) error.value = "";
     const [a, c] = await Promise.all([
       accountService.list(),
       categoryService.list(),
     ]);
-    accounts.value = a.items;
+    if (id !== request) return;
+    accounts.value = keepUnchanged(accounts.value, a.items);
     totalBalance.value = a.totalBalance;
-    categories.value = c;
+    categories.value = keepUnchanged(categories.value, c);
     if (queryText("cat")) {
       const cat = c.find((x) => x.id === queryText("cat"));
-      if (cat) selectedCategories.value = [cat.name];
+      if (cat)
+        selectedCategories.value = keepUnchanged(selectedCategories.value, [
+          cat.name,
+        ]);
     }
     await month.refreshBounds();
-    await load();
+    if (id !== request) return;
+    await load(true, background);
     initialized.value = true;
   } catch (e) {
-    error.value = (e as Error).message;
-    loading.value = false;
+    if (id !== request) return;
+    if (background) {
+      refreshError.value = "更新失败，仍显示上次数据：" + (e as Error).message;
+    } else {
+      error.value = (e as Error).message;
+      loading.value = false;
+    }
   }
 }
 const filterKeys = [
@@ -406,7 +435,8 @@ watch(
   },
 );
 watch(
-  [filter, sort, view],
+  // Watch user-selected inputs, not category objects replaced by a refresh.
+  () => JSON.stringify([currentQuery(), period.value]),
   () => {
     if (!initialized.value) return;
     clearTimeout(timer);
@@ -423,7 +453,6 @@ watch(
     });
     timer = setTimeout(() => void load(), 180);
   },
-  { deep: true },
 );
 function selectScope(id: string) {
   selectedAccounts.value = id ? [id] : [];
@@ -647,9 +676,18 @@ async function reconnect() {
 function offline() {
   connectionUnavailable.value = true;
 }
-usePageRefresh(() => {
-  if (!isSheet.value && !selected.value && !sync.value) void initialize();
-});
+async function refreshOnReturn() {
+  if (
+    isSheet.value ||
+    selected.value ||
+    sync.value ||
+    loading.value ||
+    connectionUnavailable.value
+  )
+    return;
+  await initialize(initialized.value);
+}
+usePageRefresh(refreshOnReturn);
 onMounted(() => {
   if (isSheet.value)
     void nextTick(() =>
@@ -823,7 +861,8 @@ onUnmounted(() => {
               >
             </div>
           </div>
-          <LoadError :message="error" @retry="initialize" />
+          <LoadError :message="error" @retry="initialize()" />
+          <LoadError :message="refreshError" @retry="refreshOnReturn()" />
           <PageSkeleton v-if="!initialized && loading" label="账本" />
           <template v-else>
             <dl class="work-metrics">

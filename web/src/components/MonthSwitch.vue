@@ -1,34 +1,13 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch } from "vue";
-import { useRoute } from "vue-router";
 import { useSelectedMonth } from "../composables/useSelectedMonth";
-import { pushToast } from "../composables/useToast";
 
-const route = useRoute();
 const {
   monthLabel,
   atCurrentMonth,
   atEarliestMonth,
   prevMonth,
   nextMonth,
-  refreshBounds,
 } = useSelectedMonth();
-
-function updateBounds(): void {
-  void refreshBounds().catch(() =>
-    pushToast("error", "月份范围加载失败，请稍后重试。"),
-  );
-}
-
-watch(() => route.name, updateBounds);
-onMounted(() => {
-  updateBounds();
-
-  window.addEventListener("focus", updateBounds);
-});
-onUnmounted(() => {
-  window.removeEventListener("focus", updateBounds);
-});
 </script>
 
 <template>

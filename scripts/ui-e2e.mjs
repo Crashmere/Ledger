@@ -1021,6 +1021,203 @@ try {
         width,
     );
   }
+  // Returning to the tab refreshes data without replacing content or resetting page/state.
+  const returnToPage = () =>
+    page.evaluate(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("focus"));
+      window.dispatchEvent(new Event("focus"));
+    });
+  for (const width of [1440, 375]) {
+    await page.setViewportSize({ width, height: width === 375 ? 667 : 1000 });
+    for (const view of ["list", "insights"]) {
+      await go("/transactions?view=" + view);
+      if (view === "list") {
+        await page
+          .getByLabel("展示排序", { exact: true })
+          .selectOption("time-asc");
+        await settle();
+        await page
+          .getByRole("button", { name: "第 2 页", exact: true })
+          .click();
+        await settle();
+      } else {
+        await page.locator(".trend-point").first().click();
+        await page.locator(".heatmap-day").first().click();
+      }
+      await page.mouse.move(0, 0);
+      let queries = 0,
+        accounts = 0,
+        bounds = 0;
+      const count = (request) => {
+        const path = new URL(request.url()).pathname;
+        if (path.endsWith("/transactions/query")) queries++;
+        if (path.endsWith("/accounts")) accounts++;
+        if (path.endsWith("/ledger/info")) bounds++;
+      };
+      page.on("request", count);
+      await page.route("**/api/transactions/query", async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 450));
+        await route.continue();
+      });
+      const before = await page.evaluate(() => {
+        const area = document.querySelector(".work-area");
+        document.activeElement?.blur();
+        area.scrollTop = Math.min(250, area.scrollHeight - area.clientHeight);
+        const original =
+          document.querySelector(".view-content").firstElementChild;
+        const html = original.innerHTML;
+        const top = area.scrollTop;
+        window.refreshFailures = [];
+        const sample = () => {
+          if (document.querySelector(".page-skeleton"))
+            window.refreshFailures.push("skeleton");
+          if (
+            document.querySelector(".view-content").firstElementChild !==
+            original
+          )
+            window.refreshFailures.push("remount");
+          if (original.innerHTML !== html)
+            window.refreshFailures.push("unchanged data rerendered");
+          if (Math.abs(area.scrollTop - top) > 1)
+            window.refreshFailures.push("scroll moved");
+          window.refreshFrame = requestAnimationFrame(sample);
+        };
+        sample();
+        return {
+          url: location.href,
+          currentPage: document.querySelector('[aria-current="page"]')
+            ?.textContent,
+        };
+      });
+      const updated = page.waitForResponse((response) =>
+        response.url().endsWith("/api/transactions/query"),
+      );
+      await returnToPage();
+      await page.waitForTimeout(180);
+      await returnToPage();
+      await updated;
+      await settle();
+      assert.deepEqual(
+        await page.evaluate(() => {
+          cancelAnimationFrame(window.refreshFrame);
+          return [...new Set(window.refreshFailures)];
+        }),
+        [],
+      );
+      assert.equal(queries, 1);
+      assert.equal(accounts, 1);
+      assert.equal(bounds, 1);
+      assert.equal(page.url(), before.url);
+      assert.equal(
+        await page.evaluate(
+          () => document.querySelector('[aria-current="page"]')?.textContent,
+        ),
+        before.currentPage,
+      );
+      page.off("request", count);
+      await page.unroute("**/api/transactions/query");
+      console.log(
+        "background return refresh preserves content, scroll, pagination and chart state PASS " +
+          width +
+          " " +
+          view,
+      );
+    }
+  }
+  // Changes from another client become visible after returning, including current category filters.
+  await go("/transactions?category=" + encodeURIComponent("餐饮"));
+  const extra = await api("/transactions", {
+    type: "expense",
+    amount: 12345,
+    accountId: f.accounts[0].id,
+    categoryId: f.cats.find(
+      (category) =>
+        category.accountId === f.accounts[0].id && category.name === "餐饮",
+    ).id,
+    toAccountId: null,
+    date: f.today,
+    title: "其他窗口新增验证",
+    note: null,
+  });
+  try {
+    await returnToPage();
+    await page.getByText("其他窗口新增验证", { exact: true }).waitFor();
+    assert(page.url().includes("category"));
+    // Failed background reads keep previous results visible and offer a retry.
+    await page.route("**/api/statistics/summary", (route) =>
+      route.fulfill({
+        status: 503,
+        json: { error: { code: "INTERNAL", message: "合成后台失败" } },
+      }),
+    );
+    await returnToPage();
+    await page
+      .getByRole("alert")
+      .filter({ hasText: "更新失败，仍显示上次数据" })
+      .waitFor();
+    assert(
+      await page.getByText("其他窗口新增验证", { exact: true }).isVisible(),
+    );
+    assert.equal(await page.locator(".page-skeleton").count(), 0);
+    await page.unroute("**/api/statistics/summary");
+    await page.getByRole("button", { name: "重试", exact: true }).click();
+    await page
+      .getByRole("alert")
+      .filter({ hasText: "更新失败" })
+      .waitFor({ state: "detached" });
+  } finally {
+    await page.unroute("**/api/statistics/summary");
+    await api("/transactions/" + extra.id, undefined, "DELETE");
+  }
+  // A delayed background result cannot overwrite a newer user-selected filter.
+  for (const endpoint of ["accounts", "transactions/query"]) {
+    await go("/transactions");
+    let delayed = false;
+    await page.route("**/api/" + endpoint, async (route) => {
+      if (!delayed) {
+        delayed = true;
+        const response = await route.fetch();
+        await new Promise((resolve) => setTimeout(resolve, 650));
+        await route.fulfill({ response });
+      } else await route.continue();
+    });
+    const started = page.waitForRequest((request) =>
+      request.url().endsWith("/api/" + endpoint),
+    );
+    await returnToPage();
+    await started;
+    await page
+      .getByLabel("搜索交易", { exact: true })
+      .fill("不存在的返回刷新结果");
+    await page.getByText("当前条件下没有交易", { exact: true }).waitFor();
+    await page.waitForTimeout(750);
+    assert.equal(await page.locator(".transaction-line").count(), 0);
+    assert.equal(
+      await page.getByLabel("搜索交易", { exact: true }).inputValue(),
+      "不存在的返回刷新结果",
+    );
+    await page.unroute("**/api/" + endpoint);
+  }
+  await go("/add");
+  await page.waitForLoadState("networkidle");
+  await page.getByLabel("标题", { exact: true }).fill("切回保留草稿");
+  let draftRequests = 0;
+  const draftRequest = (request) => {
+    if (new URL(request.url()).pathname.includes("/api/")) draftRequests++;
+  };
+  page.on("request", draftRequest);
+  await returnToPage();
+  await settle();
+  page.off("request", draftRequest);
+  assert.equal(draftRequests, 0);
+  assert.equal(
+    await page.getByLabel("标题", { exact: true }).inputValue(),
+    "切回保留草稿",
+  );
+  console.log(
+    "return refresh updates data, preserves filters/drafts, recovers from failure and rejects stale results PASS",
+  );
   // Page shortcuts never traverse unrelated controls or intercept modal/input editing.
   for (const width of [1440, 375]) {
     await page.setViewportSize({ width, height: width === 375 ? 667 : 1000 });
