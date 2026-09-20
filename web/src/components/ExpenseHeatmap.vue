@@ -1,17 +1,45 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import type { DailyResult, DailyTotal } from "../api";
 import { format } from "../services/money";
 import { calendarMonths } from "../services/insightData";
+import { beijingDate, dateEpoch, shiftDay } from "../services/dates";
 
 const props = defineProps<{ data: DailyResult }>();
 const year = ref("");
 const activeDate = ref<string | null>(null);
+const today = ref(beijingDate());
+let todayTimer: ReturnType<typeof setTimeout> | undefined;
+function updateToday() {
+  clearTimeout(todayTimer);
+  today.value = beijingDate();
+  // Update locally at Beijing midnight without reloading the ledger.
+  todayTimer = setTimeout(
+    updateToday,
+    Math.max(1000, dateEpoch(shiftDay(today.value, 1)) - Date.now() + 50),
+  );
+}
+function refreshToday() {
+  if (document.visibilityState === "visible") updateToday();
+}
+onMounted(() => {
+  updateToday();
+  document.addEventListener("visibilitychange", refreshToday);
+  window.addEventListener("focus", refreshToday);
+});
+onUnmounted(() => {
+  clearTimeout(todayTimer);
+  document.removeEventListener("visibilitychange", refreshToday);
+  window.removeEventListener("focus", refreshToday);
+});
 const years = computed(() => [
   ...new Set(props.data.days.map((day) => day.date.slice(0, 4))),
 ]);
 const months = computed(() => calendarMonths(props.data.days, year.value));
 const visibleDays = computed(() => months.value.flatMap((month) => month.days));
+const todayVisible = computed(() =>
+  visibleDays.value.some((day) => day.date === today.value),
+);
 const activeDay = computed(() =>
   visibleDays.value.find((day) => day.date === activeDate.value),
 );
@@ -50,7 +78,12 @@ function describeDay(day: DailyTotal) {
     <div class="card-head heatmap-head">
       <div>
         <h3>每日支出</h3>
-        <p class="heatmap-caption">每格一天 · 按月查看</p>
+        <p class="heatmap-caption">
+          每格一天 · 按月查看
+          <span v-if="todayVisible" class="heatmap-today-legend"
+            ><i aria-hidden="true" />今天</span
+          >
+        </p>
       </div>
       <select
         v-if="years.length > 1"
@@ -97,11 +130,17 @@ function describeDay(day: DailyTotal) {
                 :key="day.date"
                 type="button"
                 class="heatmap-day"
+                :class="{ 'is-today': day.date === today }"
                 :style="levelStyles[day.level]"
                 :data-level="day.level"
                 :data-date="day.date"
-                :aria-label="describeDay(day)"
-                :title="describeDay(day)"
+                :aria-current="day.date === today ? 'date' : undefined"
+                :aria-label="
+                  (day.date === today ? '今天 · ' : '') + describeDay(day)
+                "
+                :title="
+                  (day.date === today ? '今天 · ' : '') + describeDay(day)
+                "
                 tabindex="-1"
                 @mouseenter="activeDate = day.date"
                 @click="activeDate = day.date"
@@ -151,9 +190,25 @@ function describeDay(day: DailyTotal) {
   gap: 8px;
 }
 .heatmap-caption {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
   font-size: 11px;
   color: var(--fg-3);
   margin-top: 5px;
+}
+.heatmap-today-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #93691f;
+}
+.heatmap-today-legend i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #dfb25f;
 }
 .heatmap-year {
   border: 1px solid var(--border);
@@ -201,6 +256,7 @@ function describeDay(day: DailyTotal) {
   margin-bottom: 5px;
 }
 .heatmap-day {
+  position: relative;
   aspect-ratio: 1;
   width: 100%;
   min-width: 0;
@@ -209,6 +265,38 @@ function describeDay(day: DailyTotal) {
   border-radius: 4px;
   font-size: 9px;
   font-variant-numeric: tabular-nums;
+}
+.heatmap-day.is-today::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid #dfb25f;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: today-glow 2.4s ease-in-out infinite;
+}
+.heatmap-day.is-today::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #ffe5a9;
+  box-shadow: 0 0 4px #d09a35;
+  pointer-events: none;
+}
+@keyframes today-glow {
+  0%,
+  100% {
+    opacity: 0.65;
+    box-shadow: inset 0 0 0 1px #fff3d680;
+  }
+  50% {
+    opacity: 1;
+    box-shadow: inset 0 0 7px 1px #e8ba6466;
+  }
 }
 .heatmap-month-grid--single {
   grid-template-columns: minmax(0, 1fr);
@@ -235,6 +323,17 @@ function describeDay(day: DailyTotal) {
   max-height: 56px;
   border-radius: 6px;
   font-size: 13px;
+}
+.heatmap-month-grid--single .heatmap-day.is-today::after {
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .heatmap-day.is-today::before {
+    animation: none;
+  }
 }
 .heatmap-detail {
   margin-top: 16px;
