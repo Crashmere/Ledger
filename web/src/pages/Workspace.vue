@@ -194,6 +194,11 @@ watch(loading, (pending) => {
   // Reserve the previous result height before the loading skeleton replaces it.
   // Otherwise the scroll container shrinks and the browser clamps scrollTop to zero.
   pendingResultHeight.value = pending ? resultView.value?.offsetHeight || 0 : 0;
+  if (pending && resultView.value) {
+    // Removing a focused pagination control can force layout during Vue's child
+    // patch, before the parent's bound style is applied. Reserve the height now.
+    resultView.value.style.minHeight = pendingResultHeight.value + "px";
+  }
 });
 const initialized = ref(false);
 const error = ref("");

@@ -329,6 +329,94 @@ try {
     console.log(
       "numbered pagination, page sizes, first/last boundaries and overview redirect PASS",
     );
+    // Real clicks focus the pagination control. Removing it can force a layout
+    // before Vue applies the result container's height reservation.
+    for (const width of [1440, 375]) {
+      await page.setViewportSize({ width, height: width === 375 ? 667 : 1000 });
+      for (const reducedMotion of ["no-preference", "reduce"]) {
+        await page.emulateMedia({ reducedMotion });
+        await go("/transactions");
+        await page.route("**/api/transactions/query", async (route) => {
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          await route.continue();
+        });
+        const checkPaginationScroll = async (action, expectedPage) => {
+          const top = await page.locator(".work-area").evaluate((area) => {
+            area.scrollTop = area.scrollHeight;
+            return area.scrollTop;
+          });
+          await page.evaluate((top) => {
+            window.paginationFailures = [];
+            const sample = () => {
+              const area = document.querySelector(".work-area");
+              const expected = Math.min(top, area.scrollHeight - area.clientHeight);
+              if (Math.abs(area.scrollTop - expected) > 1)
+                window.paginationFailures.push({ actual: area.scrollTop, expected });
+              window.paginationFrame = requestAnimationFrame(sample);
+            };
+            sample();
+          }, top);
+          try {
+            await action();
+            await page.getByLabel("正在加载筛选结果", { exact: true }).waitFor();
+            assert.equal(
+              await page.locator(".work-area").evaluate((area) => area.scrollTop),
+              top,
+              "pagination must preserve scroll while loading",
+            );
+            await page.getByLabel("正在加载筛选结果", { exact: true })
+              .waitFor({ state: "detached" });
+            await page.waitForTimeout(80);
+            assert.equal(
+              await page.locator('.pagination [aria-current="page"]').innerText(),
+              String(expectedPage),
+            );
+            assert.equal(
+              await page.locator("#ledger-view").evaluate((el) => el.style.minHeight),
+              "",
+              "completed pagination must release its height reservation",
+            );
+            assert.deepEqual(
+              await page.evaluate(() => window.paginationFailures),
+              [],
+              "pagination scroll at " + width + " / " + reducedMotion,
+            );
+          } finally {
+            await page.evaluate(() => cancelAnimationFrame(window.paginationFrame));
+          }
+        };
+        await checkPaginationScroll(
+          () => page.getByLabel("每页条数").selectOption("20"), 1,
+        );
+        for (const [name, target] of [
+          ["下一页", 2], ["上一页", 1], ["第 3 页", 3],
+          ["第 1 页", 1], ["第 5 页", 5], ["上一页", 4],
+        ]) {
+          await checkPaginationScroll(
+            () => page.getByRole("button", { name, exact: true }).click(), target,
+          );
+        }
+        // A user may continue scrolling during the request; do not restore a
+        // stale position when the new page arrives.
+        await page.getByRole("button", { name: "上一页", exact: true }).click();
+        await page.getByLabel("正在加载筛选结果", { exact: true }).waitFor();
+        const movedTop = await page.locator(".work-area").evaluate((area) => {
+          area.scrollTop -= 80;
+          return area.scrollTop;
+        });
+        await page.getByLabel("正在加载筛选结果", { exact: true })
+          .waitFor({ state: "detached" });
+        assert.equal(
+          await page.locator(".work-area").evaluate((area) => area.scrollTop),
+          movedTop,
+        );
+        await page.unroute("**/api/transactions/query");
+      }
+      console.log("pagination click scroll, page sizes, short last page and loading scroll PASS " + width);
+    }
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await go("/transactions");
     await page.getByLabel("搜索交易", { exact: true }).fill("午餐");
     await settle();
     assert((await page.locator(".transaction-line").count()) > 0);
