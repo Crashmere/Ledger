@@ -126,26 +126,45 @@ func buildFilter(f TransactionFilter) (string, []any, error) {
 	}
 	fields := f.SearchFields
 	for _, field := range fields {
-		if !slices.Contains([]string{"title", "note", "category"}, field) {
+		if !slices.Contains(searchFields, field) {
 			return "", nil, invalid("searchFields", "搜索字段无效")
 		}
 	}
-	keyword := cases.Lower(language.Und).String(strings.Trim(f.Keyword, "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"))
+	trimmed := strings.Trim(f.Keyword, "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff")
+	keyword := cases.Lower(language.Und).String(trimmed)
 	if keyword != "" {
-		if len(fields) == 0 || len(fields) > 3 {
-			return "", nil, invalid("searchFields", "请选择 1 至 3 个搜索字段")
+		if len(fields) == 0 || len(fields) > len(searchFields) {
+			return "", nil, invalid("searchFields", fmt.Sprintf("请选择 1 至 %d 个搜索字段", len(searchFields)))
 		}
 		matches := []string{}
 		for _, field := range fields {
 			switch field {
 			case "title", "note":
 				matches = append(matches, fmt.Sprintf("instr(ledger_lower(t.%s),?)>0", field))
+				args = append(args, keyword)
 			case "category":
 				matches = append(matches, "EXISTS (SELECT 1 FROM category c WHERE c.id=t.category_id AND c.is_delete=0 AND instr(ledger_lower(c.name),?)>0)")
+				args = append(args, keyword)
+			case "amount":
+				if cents, ok := keywordAmount(trimmed); ok {
+					matches = append(matches, "t.amount=?")
+					args = append(args, cents)
+				}
 			}
-			args = append(args, keyword)
+		}
+		if len(matches) == 0 {
+			matches = append(matches, "0")
 		}
 		where = append(where, "("+strings.Join(matches, " OR ")+")")
 	}
 	return strings.Join(where, " AND "), args, nil
+}
+
+var searchFields = []string{"title", "note", "category", "amount"}
+
+// keywordAmount 把关键词按元解析为整数分，符号只表示收支方向，不参与比较。
+func keywordAmount(value string) (int64, bool) {
+	value = strings.NewReplacer("¥", "", "￥", "", ",", "", "，", "", " ", "").Replace(value)
+	_, cents, err := parseAmount(value)
+	return cents, err == nil
 }

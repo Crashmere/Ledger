@@ -65,7 +65,7 @@ TransactionFilter 可被列表和三个统计接口复用；不同维度取交�
 | categoryIds | 分类 ID，跨账户同名分类可一起提交 |
 | amountMin/amountMax | 含上下界，单位分 |
 | keyword | 去首尾空白，Unicode 不区分大小写的字面子串；% 和 _ 无特殊含义 |
-| searchFields | title/note/category；有关键词时必须选 1–3 项 |
+| searchFields | title/note/category/amount；有关键词时必须选 1–4 项。amount 把关键词按元解析（最多两位小数，忽略 ¥/￥、千分位逗号、空格和正负号）并精确匹配交易金额；无法解析时该字段不命中 |
 | excludedIds | 从列表及所有统计排除，最多 500 个 |
 | projectScope | all（默认）；exclude 排除任一端涉及专项；selected 只放开明确选中的专项相关交易 |
 

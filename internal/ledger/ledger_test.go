@@ -147,6 +147,36 @@ func TestProjectSelectionAndLiteralUnicodeSearch(t *testing.T) {
 		}
 	}
 }
+func TestAmountSearchField(t *testing.T) {
+	s := testStore(t)
+	a := account(t, s, "日常", "normal", 0)
+	transaction(t, s, TransactionInput{Type: "expense", Amount: 3500, AccountID: a.ID, Date: "2026-09-01", Title: pointer("午餐")})
+	transaction(t, s, TransactionInput{Type: "income", Amount: 123456, AccountID: a.ID, Date: "2026-09-01", Title: pointer("奖金")})
+	transaction(t, s, TransactionInput{Type: "expense", Amount: 13500, AccountID: a.ID, Date: "2026-09-01", Title: pointer("买了 35 个")})
+	for _, tc := range []struct {
+		keyword string
+		fields  []string
+		count   int64
+	}{
+		{"35", []string{"amount"}, 1},
+		{"35.00", []string{"amount"}, 1},
+		{"-35", []string{"amount"}, 1},
+		{"¥1,234.56", []string{"amount"}, 1},
+		{"+1234.56", []string{"amount"}, 1},
+		{"35", []string{"title", "amount"}, 2},
+		{"35.001", []string{"amount"}, 0},
+		{"午餐", []string{"amount"}, 0},
+		{"午餐", []string{"title", "amount"}, 1},
+	} {
+		page, e := s.QueryTransactions(testContext, TransactionQuery{Filter: TransactionFilter{Keyword: tc.keyword, SearchFields: tc.fields}})
+		if e != nil || page.TotalCount != tc.count {
+			t.Fatalf("amount search %+v: %d %v", tc, page.TotalCount, e)
+		}
+	}
+	if _, e := s.QueryTransactions(testContext, TransactionQuery{Filter: TransactionFilter{Keyword: "35", SearchFields: []string{"title", "note", "category", "amount", "title"}}}); e == nil {
+		t.Fatal("expected too many search fields to fail")
+	}
+}
 func TestDatePreservationAndCalendar(t *testing.T) {
 	s := testStore(t)
 	a := account(t, s, "日常", "normal", 0)

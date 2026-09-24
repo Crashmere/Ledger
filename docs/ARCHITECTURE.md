@@ -103,7 +103,7 @@ FabricWorld 用交易 ID 作为持久幂等来源，保存日期、整数分转�
 
 1. Workspace.vue 将控件状态组成 TransactionFilter，关键词输入防抖 180ms。临时排除 ID 也放入 filter。关键词、字段、账户、分类、类型、金额、排序和排除项保存在路由查询参数中，编辑返回时恢复；月份复用 useSelectedMonth 的会话状态。
 2. 同一个 filter 分别传 query 和 summary；page、sortBy、sortDir 只影响 query。
-3. filters.go 用固定列和参数化 SQL 生成 WHERE。日期范围按北京时间转换，关键词在指定字段作 Unicode 小写字面匹配。
+3. filters.go 用固定列和参数化 SQL 生成 WHERE。日期范围按北京时间转换，关键词在标题、备注、分类中作 Unicode 小写字面匹配；金额字段把关键词解析为整数分后精确匹配。
 4. transactions.go 用 COUNT、ORDER BY、LIMIT/OFFSET 取当前页。工作台额外请求本页涉及日期的完整日小计。
 5. statistics.go 用 SQL 聚合完整筛选集，再用 Go 算年化、补齐每日日期和热力等级。
 6. 前端只绘图、格式化和排列当前页。翻页不重新请求统计，筛选变化回第一页。请求序号只防止迟到响应覆盖新选择。

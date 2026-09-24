@@ -417,6 +417,24 @@ try {
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await page.setViewportSize({ width: 1440, height: 1000 });
     await go("/transactions");
+    await page.getByLabel("搜索交易", { exact: true }).fill("¥230");
+    await settle();
+    assert.equal(await page.locator(".transaction-line").count(), 1);
+    assert((await page.locator(".transaction-line").innerText()).includes("退款"));
+    await page.getByRole("button", { name: /^筛选/ }).click();
+    await page.getByLabel("金额", { exact: true }).uncheck();
+    await settle();
+    assert.equal(await page.locator(".transaction-line").count(), 0);
+    assert.equal(
+      new URL(page.url()).searchParams.get("fields"),
+      "title,note,category",
+    );
+    await page.getByLabel("金额", { exact: true }).check();
+    await settle();
+    assert.equal(new URL(page.url()).searchParams.get("fields"), null);
+    assert.equal(await page.locator(".transaction-line").count(), 1);
+    console.log("amount search field PASS");
+    await go("/transactions");
     await page.getByLabel("搜索交易", { exact: true }).fill("午餐");
     await settle();
     assert((await page.locator(".transaction-line").count()) > 0);

@@ -13,6 +13,7 @@ import {
   type Transaction,
   type TransactionFilter,
   type TxnType,
+  type SearchField,
   type DayTotal,
   type CategoryTotal,
   type DailyResult,
@@ -61,14 +62,20 @@ const selectedTypes = ref<TxnType[]>(
     .filter((v): v is TxnType => ["income", "expense", "transfer"].includes(v)),
 );
 const keyword = ref(queryText("q"));
-const fields = ref<("title" | "note" | "category")[]>(
-  queryText("fields")
+const searchFieldLabels: Record<SearchField, string> = {
+  title: "标题",
+  note: "备注",
+  category: "分类",
+  amount: "金额",
+};
+const allSearchFields = Object.keys(searchFieldLabels) as SearchField[];
+const parseFields = () => {
+  const picked = queryText("fields")
     .split(",")
-    .filter((v): v is "title" | "note" | "category" =>
-      ["title", "note", "category"].includes(v),
-    ),
-);
-if (!fields.value.length) fields.value = ["title", "note", "category"];
+    .filter((v): v is SearchField => allSearchFields.includes(v as SearchField));
+  return picked.length ? [...new Set(picked)] : [...allSearchFields];
+};
+const fields = ref<SearchField[]>(parseFields());
 const min = ref<number | null>(
   queryText("min") && /^[0-9]+$/.test(queryText("min"))
     ? Number(queryText("min"))
@@ -215,7 +222,7 @@ const currentQuery = () => {
     q.categories = JSON.stringify(selectedCategories.value);
   if (selectedTypes.value.length) q.types = selectedTypes.value.join(",");
   if (keyword.value) q.q = keyword.value;
-  if (fields.value.join(",") !== "title,note,category")
+  if (fields.value.join(",") !== allSearchFields.join(","))
     q.fields = fields.value.join(",");
   if (min.value !== null) q.min = String(min.value);
   if (max.value !== null) q.max = String(max.value);
@@ -407,12 +414,7 @@ watch(
         ["expense", "income", "transfer"].includes(v),
       );
     keyword.value = queryText("q");
-    fields.value = queryText("fields")
-      .split(",")
-      .filter((v): v is "title" | "note" | "category" =>
-        ["title", "note", "category"].includes(v),
-      );
-    if (!fields.value.length) fields.value = ["title", "note", "category"];
+    fields.value = parseFields();
     min.value =
       queryText("min") && /^[0-9]+$/.test(queryText("min"))
         ? Number(queryText("min"))
@@ -655,11 +657,14 @@ function clearRecent() {
     localStorage.removeItem("search:recent");
   } catch {}
 }
-function toggleField(v: "title" | "note" | "category") {
+function toggleField(v: SearchField) {
   if (fields.value.includes(v)) {
     if (fields.value.length > 1)
       fields.value = fields.value.filter((f) => f !== v);
-  } else fields.value = [...fields.value, v];
+  } else
+    fields.value = allSearchFields.filter(
+      (f) => f === v || fields.value.includes(f),
+    );
 }
 function drilldown(name: string) {
   selectedCategories.value = [name];
@@ -1025,16 +1030,14 @@ onUnmounted(() => {
                     <div class="search-settings">
                       搜索范围
                       <label
-                        v-for="f in ['title', 'note', 'category'] as const"
+                        v-for="f in allSearchFields"
                         :key="f"
                         ><input
                           type="checkbox"
                           :checked="fields.includes(f)"
                           :disabled="fields.length === 1 && fields.includes(f)"
                           @change="toggleField(f)"
-                        />{{
-                          { title: "标题", note: "备注", category: "分类" }[f]
-                        }}</label
+                        />{{ searchFieldLabels[f] }}</label
                       >
                     </div>
                     <div v-if="recent.length" class="recent-search">

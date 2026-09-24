@@ -26,10 +26,11 @@ export interface TransactionInput {
   type: TxnType; amount: Cents; accountId: Id; toAccountId: Id | null;
   categoryId: Id | null; date: string; title: string | null; note: string | null;
 }
+export type SearchField = 'title' | 'note' | 'category' | 'amount';
 export interface TransactionFilter {
   dateFrom?: string; dateTo?: string; types?: TxnType[]; accountIds?: Id[];
   categoryIds?: Id[]; amountMin?: Cents; amountMax?: Cents;
-  keyword?: string; searchFields?: ('title' | 'note' | 'category')[];
+  keyword?: string; searchFields?: SearchField[];
   excludedIds?: Id[]; projectScope?: 'all' | 'exclude' | 'selected';
 }
 export interface TransactionQuery {
