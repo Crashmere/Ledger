@@ -206,13 +206,13 @@ GitHub 上传超时按 [CICD](CICD.md#查看状态和回退) 指向的共享备�
 
 ## 文档同步
 
-本仓库是项目文档源；服务器 `/opt/ledger/docs` 是供现场阅读的副本，不是另一个独立版本。每次变更主动更新相应 docs，覆盖旧说明。完整共享同步规程见 [maintenance.md](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/maintenance.md)，服务器同名文件在 `/opt/server-context/references/maintenance.md`。
+本仓库是项目文档源；服务器 `/opt/ledger/AGENTS.md` 与 `/opt/ledger/docs` 是副本。提交并推送后运行共享脚本同步，它负责漂移检查、安装、逐文件校验、`docs/SOURCE` 和清理，用法见 [maintenance.md 文档同步](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/maintenance.md#文档同步)：
 
-项目文档白名单为当前 Git 跟踪的 `AGENTS.md` 与 `docs/*.md`，先用 `git ls-files` 审阅，再从已提交版本 `git archive` 导出。禁止直接递归上传本地 docs，以免带入未跟踪的私人维护材料。同步验证完成后清理本次明确创建的暂存目录，不长期保留重复文档包。
+```sh
+~/agent-config/skills/server-operations/scripts/sync-docs.sh Ledger
+```
 
-由管理员上传到独立暂存目录，安装项目入口到 `/opt/ledger/AGENTS.md`，文档到 `/opt/ledger/docs/`，均 root:root/0644；最终写 `docs/SOURCE`，记录 repository、完整 commit、subdirectory、synced_at。逐文件比较哈希，删除文档时明确同步移除已知受管理旧文件。不要改 `current-commit` 来假装文档和程序是同一版本。
-
-普通 CI 不同步文档，也不自动应用配置。推送 main 的文档提交若不需发布可按 CICD 使用 skip 标记，仍必须同步服务器副本。应用源码改动不能借此跳过应该执行的测试/部署。
+普通 CI 不同步文档，也不自动应用配置。纯文档提交用 `[skip ci]` 推送，避免触发发布；应用源码改动不能借此跳过应该执行的测试和部署。
 
 ## 排查
 
