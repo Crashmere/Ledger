@@ -49,6 +49,6 @@ GitHub 仓库 Actions 页面查看测试、构建和 SSH 日志。服务器保�
 
 发布历史和升级前备份暂不自动清理，不受每日 14 份备份轮换影响。定期检查磁盘，确认无需回退后再按明确目录清理。
 
-失败先看 Actions 和 journalctl -u ledger。若日志显示 Previous program is healthy，旧程序已恢复，账本未回退。若显示 ROLLBACK FAILED，按 OPERATIONS.md 排查。手工回退程序也应先停服和备份；数据库恢复需人工确认恢复时点。
+失败先看 Actions 和 journalctl -u ledger。Actions 日志以 exit code 124 结束且发布目录没有 metadata，说明 runner 到服务器的上传没在 90 秒内完成，旧程序未停止。可稍后重跑 deploy 作业；持续超时时，管理员可用 `gh run download <run-id> -n ledger-linux` 下载同一次 CI 产物，核对 SHA-256 与 Actions 日志中 sudo 命令的参数一致后，从受信终端执行 `ssh ali '/opt/ledger/bin/deploy-release.sh <commit> <sha256>' < ledger-linux-amd64`，仍走同一脚本的备份、校验与回退。不要上传本地构建的程序。若日志显示 Previous program is healthy，旧程序已恢复，账本未回退。若显示 ROLLBACK FAILED，按 OPERATIONS.md 排查。手工回退程序也应先停服和备份；数据库恢复需人工确认恢复时点。
 
 测试命令 node --test deploy/deploy-release.test.mjs 使用隔离目录和合成命令，覆盖成功、上传哈希错误、候选校验失败、健康检查失败；不会连接生产或读取真实数据，已纳入 make test。
