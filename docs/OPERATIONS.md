@@ -101,7 +101,7 @@ make linux BASE_PATH=/ledger/
 - 保留已有数据：使用经 Ledger 维护工具验证的一致性备份。
 - 明确不要历史数据的新实例：在暂存目录用 `./ledger-linux-amd64 init --db ./initial.sqlite` 创建空库。不能在已有生产目录这样处理缺库。
 
-在服务器暂存目录运行（这里开始是写操作，需要部署授权）：
+在服务器暂存目录运行（以下为写操作）：
 
 ```sh
 sudo bash deploy/install.sh ./ledger-linux-amd64 ./initial.sqlite
@@ -123,7 +123,7 @@ curl --fail http://127.0.0.1/ledger/healthz
 curl --fail http://127.0.0.1/ledger/search
 ```
 
-检查资源前缀和公网访问，18080 不对公网开放；云侧权限按共享指南核实。然后设置 [CI/CD](CICD.md)，同步项目 AGENTS/docs，更新共享应用清单。首次安装脚本不会自动配置 CI 或同步文档。
+检查资源前缀和公网访问，18080 不对公网开放；云侧权限按共享指南核实。然后设置 [CI/CD](CICD.md)，更新共享应用清单，运行 `sync-docs.sh Ledger` 同步文档。首次安装脚本不会自动配置 CI 或同步文档。
 
 ## 备份
 
@@ -138,7 +138,7 @@ journalctl -u ledger-backup.service -n 30 --no-pager
 ls -lht /opt/ledger/backups/
 ```
 
-backup service 执行完显示 inactive 正常，失败看日志与 Result。备份文件名用 UTC，可能比北京时间日期早一天。下列命令会立即创建备份，并按 daily 规则轮换，仅在需要且获授权时执行：
+backup service 执行完显示 inactive 正常，失败看日志与 Result。备份文件名用 UTC，可能比北京时间日期早一天。下列命令会立即创建一份 daily 备份，并按规则轮换掉最旧的一份：
 
 ```sh
 sudo systemctl start ledger-backup.service
@@ -226,4 +226,4 @@ GitHub 上传超时按 [CICD](CICD.md#查看状态和回退) 指向的共享备�
 | 磁盘增长 | data/backups/releases；发布历史不自动轮换，不擅自删 WAL |
 | 写请求结果不明 | 先只读核对是否已保存，不自动重试写入 |
 
-主机其他失败 unit、外部工具和共享问题以服务器清单为入口；不要把 Ledger 运维扩大成未经授权的整机清理。
+主机其他失败 unit、外部工具和共享问题以服务器清单和 common-issues 为入口，不在 Ledger 文档里另写处理方法。
