@@ -11,7 +11,7 @@
 | 请求、保存、筛选统计如何运行，代码从哪里读 | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | API 字段、通用筛选、分页和统计契约 | [API.md](API.md) |
 | 当前部署、查看命令、首次安装、备份恢复、排障 | [OPERATIONS.md](OPERATIONS.md) |
-| GitHub Actions、受限发布账号、更新和回退、上传过慢时的备用发布 | [CICD.md](CICD.md) |
+| GitHub Actions、受限发布账号、更新和回退 | [CICD.md](CICD.md) |
 
 源码仓库的 README 提供本地开发和构建入口；服务器维护材料以本目录为入口。全局服务器约定不复制在此，见 [server-operations](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/SKILL.md)，服务器副本位于 `/opt/server-context/`，先读 `/opt/AGENTS.md`。
 

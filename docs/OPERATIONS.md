@@ -169,7 +169,7 @@ Ledger 通过环境变量 LEDGER_FABRICWORLD_URL 调用 FabricWorld，未设置�
 
 日常程序更新走 main → GitHub Actions，流程、权限、备份与自动回退见 [CICD.md](CICD.md)。写入生产之前通过合成测试。发布历史不自动清理。
 
-GitHub 上传超时的标准处理见 [CICD 备用发布](CICD.md#github-上传过慢时的备用发布)。其他管理员紧急手工发布同样复用已安装的 `/opt/ledger/bin/deploy-release.sh`：对已验证产物提供完整源码 commit 与 SHA-256，从 stdin 输入二进制。该脚本已有锁、停服备份、候选校验、原子替换和健康回退；不要另写一套直接覆盖可执行文件的快捷命令。必须先读源码并确认权限、来源与参数，具体接口见 CICD。
+GitHub 上传超时按 [CICD](CICD.md#查看状态和回退) 指向的共享备用发布处理。其他管理员紧急手工发布同样复用已安装的 `/opt/ledger/bin/deploy-release.sh`：对已验证产物提供完整源码 commit 与 SHA-256，从 stdin 输入二进制。该脚本已有锁、停服备份、候选校验、原子替换和健康回退；不要另写一套直接覆盖可执行文件的快捷命令。必须先读源码并确认权限、来源与参数，具体接口见 CICD。
 
 配置变更不会随二进制发布：
 
@@ -221,7 +221,7 @@ GitHub 上传超时的标准处理见 [CICD 备用发布](CICD.md#github-上传�
 | 直连 18080 健康失败 | ledger unit/journal、env、路径/权限；不要创建空库 |
 | 直连成功，/ledger/ 失败 | Nginx location/link、语法、80、安全组；根 / 的 404 正常 |
 | 页面能打开但资源/API 失败 | 构建 BASE_PATH、Vue/API 前缀、代理去前缀、Host；测试深链接 |
-| 发布失败 | Actions 日志、releases/result、ledger journal；见 CICD 回退含义。exit 124 上传超时直接走 CICD 备用发布 |
+| 发布失败 | Actions 日志、releases/result、ledger journal；见 CICD 回退含义。exit 124 上传超时直接走共享备用发布（见 CICD） |
 | 备份服务 inactive | 先查 Result/journal 与文件，oneshot 完成后本来就退出 |
 | 磁盘增长 | data/backups/releases；发布历史不自动轮换，不擅自删 WAL |
 | 写请求结果不明 | 先只读核对是否已保存，不自动重试写入 |

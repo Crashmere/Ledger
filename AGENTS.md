@@ -6,6 +6,7 @@
 
 - 对部署、服务器排查、新应用共存或共享架构改动，先使用 `server-operations` 技能。源为 `Crashmere/agent-config/skills/server-operations/SKILL.md`，本地通常在 `~/agent-config`。
 - 即使客户端未加载该技能，也要显式读取 `ssh ali 'cat /opt/AGENTS.md'`，再按导航读取共享文档；SSH 不会自动加载远端 AGENTS。
+- 可能影响其他应用的共性问题（主机、网络、共享发布/备份模式等），解决方案写入 agent-config 的 `references/common-issues.md` 并覆盖全部受影响应用，本项目只留参数和链接。
 - 共享入口/主机约定归 agent-config；本项目只维护 Ledger 的程序、location、unit、数据与发布。跨项目变更必须评估共享应用清单中的所有应用，按用户授权协调实施与同步文档。
 
 ## 实现与验证
