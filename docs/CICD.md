@@ -47,8 +47,41 @@ GitHub 仓库 Actions 页面查看测试、构建和 SSH 日志。服务器保�
 /opt/ledger/backups/before-deploy-<发布目录名>.sqlite
 ```
 
-发布历史和升级前备份暂不自动清理，不受每日 14 份备份轮换影响。定期检查磁盘，确认无需回退后再按明确目录清理。
+成功的发布历史和升级前备份暂不自动清理，不受每日 14 份备份轮换影响。定期检查磁盘，确认无需回退后再按明确目录清理。result 为 failed 且没有 metadata 的发布目录是在上传或哈希校验阶段中止的，从未停服、没有对应备份，只含不完整程序，确认后直接删除。
 
-失败先看 Actions 和 journalctl -u ledger。Actions 日志以 exit code 124 结束且发布目录没有 metadata，说明 runner 到服务器的上传没在 90 秒内完成，旧程序未停止。可稍后重跑 deploy 作业；持续超时时，管理员可用 `gh run download <run-id> -n ledger-linux` 下载同一次 CI 产物，核对 SHA-256 与 Actions 日志中 sudo 命令的参数一致后，从受信终端执行 `ssh ali '/opt/ledger/bin/deploy-release.sh <commit> <sha256>' < ledger-linux-amd64`，仍走同一脚本的备份、校验与回退。不要上传本地构建的程序。若日志显示 Previous program is healthy，旧程序已恢复，账本未回退。若显示 ROLLBACK FAILED，按 OPERATIONS.md 排查。手工回退程序也应先停服和备份；数据库恢复需人工确认恢复时点。
+失败先看 Actions 和 journalctl -u ledger。若日志显示 Previous program is healthy，旧程序已恢复，账本未回退。若显示 ROLLBACK FAILED，按 OPERATIONS.md 排查。手工回退程序也应先停服和备份；数据库恢复需人工确认恢复时点。
+
+## GitHub 上传过慢时的备用发布
+
+托管 runner 在境外，到服务器的跨境线路偶尔会降到几十 KB/s，而服务器只等待 90 秒上传。正常上传只需约 10 秒；遇到上传超时就不再重跑 deploy 作业，直接由管理员从受信终端把同一次 CI 产物交给同一个发布脚本。备份、候选校验、健康检查和失败回退与 CI 完全相同。
+
+只在以下情况全部成立时使用：deploy 的 SSH 步骤以 exit code 124 结束；最新发布目录 result 为 failed 且没有 metadata；current-commit 仍是旧提交且服务健康；该 run 的 commit 仍是 main 最新提交；verify 作业成功。哈希不符、候选 check 失败、健康检查失败等其他错误先排查原因，不用本方案绕过。
+
+1. 确认现场状态，并找出 CI 传给服务器的哈希（受限入口的 sudo 日志中）：
+
+   ```bash
+   ssh ali 'cat /opt/ledger/current-commit; systemctl is-active ledger
+     d=$(ls -1t /opt/ledger/releases | head -1); echo $d; cat /opt/ledger/releases/$d/result; ls /opt/ledger/releases/$d
+     journalctl --since today --no-pager | grep "deploy-release.sh <commit>" | tail -1'
+   ```
+
+2. 下载同一次 run 的产物并核对：本地 SHA-256 必须等于 sudo 日志中的第二个参数；服务器已安装的脚本须与仓库 `deploy/deploy-release.sh` 哈希一致。不要改用本地构建的程序。
+
+   ```bash
+   gh run download <run-id> -n ledger-linux -D var/deploy-artifact
+   shasum -a 256 var/deploy-artifact/ledger-linux-amd64 deploy/deploy-release.sh
+   ssh ali 'sha256sum /opt/ledger/bin/deploy-release.sh'
+   ```
+
+3. 以管理员身份发布。输出 `Deployed <commit>; backup: ...` 即成功；启动初期可能出现一次 18080 连接失败，是脚本等待健康前的探测。
+
+   ```bash
+   ssh ali '/opt/ledger/bin/deploy-release.sh <commit> <sha256>' < var/deploy-artifact/ledger-linux-amd64
+   ```
+
+4. 只读验收：current-commit 为新提交，`systemctl is-active ledger`、`/ledger/healthz` 与 `/ledger/search` 正常，按改动核对页面或 API，不写测试账目。
+5. 清理：删除本次超时留下的 failed 且无 metadata 的发布目录（逐个确认后按完整目录名删除），删除本地 `var/deploy-artifact`。保留成功发布目录和 before-deploy 备份。
+
+该 run 在 Actions 中仍显示失败，这是预期结果；发布后不要再重跑它，否则会以同一程序再停服、备份一次。
 
 测试命令 node --test deploy/deploy-release.test.mjs 使用隔离目录和合成命令，覆盖成功、上传哈希错误、候选校验失败、健康检查失败；不会连接生产或读取真实数据，已纳入 make test。
