@@ -543,9 +543,10 @@ watch(isSheet, async (open) => {
         ?.querySelector<HTMLButtonElement>(".sheet-close")
         ?.focus();
   } else {
-    await initialize();
     await nextTick();
-    previousFocus?.focus();
+    previousFocus?.focus({ preventScroll: true });
+    // Keep the current results on screen while changes from the panel load.
+    await initialize(initialized.value);
   }
 });
 function trapSheet(e: KeyboardEvent) {

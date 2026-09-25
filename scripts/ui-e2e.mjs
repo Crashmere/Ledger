@@ -1550,6 +1550,58 @@ try {
   console.log(
     "tab keyboard navigation, transitions, filters and reduced motion PASS",
   );
+  // Closing a panel refreshes in the background without swapping in a skeleton.
+  for (const view of ["list", "insights"]) {
+    await go(
+      "/transactions?range=all" + (view === "insights" ? "&view=insights" : ""),
+    );
+    const scrollBefore = await page.locator(".work-area").evaluate((area) => {
+      area.scrollTop = Math.min(120, area.scrollHeight - area.clientHeight);
+      return area.scrollTop;
+    });
+    await page.getByRole("button", { name: "记一笔", exact: true }).first().click();
+    await page.getByLabel("标题", { exact: true }).waitFor();
+    await page.evaluate(() => {
+      window.__panelCloseFlashes = [];
+      const area = document.querySelector(".work-area");
+      window.__panelCloseObserver = new MutationObserver(() => {
+        if (
+          area.querySelector(".page-skeleton") ||
+          area.querySelector('[aria-busy="true"]')
+        )
+          window.__panelCloseFlashes.push(performance.now());
+      });
+      window.__panelCloseObserver.observe(area, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ["aria-busy"],
+      });
+    });
+    let refreshed = false;
+    await page.route("**/api/transactions/query", async (r) => {
+      refreshed = true;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      await r.continue();
+    });
+    await page.getByRole("button", { name: "关闭面板" }).click();
+    await page.locator(".workspace-sheet").waitFor({ state: "detached" });
+    await page.waitForTimeout(900);
+    await page.unroute("**/api/transactions/query");
+    assert(refreshed, "closing the panel should refresh in the background");
+    assert.deepEqual(
+      await page.evaluate(() => {
+        window.__panelCloseObserver.disconnect();
+        return window.__panelCloseFlashes;
+      }),
+      [],
+    );
+    assert.equal(
+      await page.locator(".work-area").evaluate((area) => area.scrollTop),
+      scrollBefore,
+    );
+  }
+  console.log("panel close background refresh without skeleton PASS");
   // A short loading skeleton must not shrink the scroll range during view/month changes.
   const previousMonthDate = new Date(f.month + "-01T00:00:00Z");
   previousMonthDate.setUTCMonth(previousMonthDate.getUTCMonth() - 1);
