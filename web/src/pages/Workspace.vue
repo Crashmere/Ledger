@@ -538,9 +538,10 @@ watch(isSheet, async (open) => {
   if (open) {
     previousFocus = document.activeElement as HTMLElement;
     await nextTick();
-    sheetElement.value
-      ?.querySelector<HTMLButtonElement>(".sheet-close")
-      ?.focus();
+    if (!sheetElement.value?.contains(document.activeElement))
+      sheetElement.value
+        ?.querySelector<HTMLButtonElement>(".sheet-close")
+        ?.focus();
   } else {
     await initialize();
     await nextTick();

@@ -942,6 +942,17 @@ try {
     );
     await page.keyboard.press("Alt+n");
     await settle();
+    assert(
+      await page
+        .getByLabel("金额（元）", { exact: true })
+        .evaluate((el) => el === document.activeElement),
+    );
+    await page.keyboard.press("Escape");
+    await settle();
+    assert(await page.locator(".workspace-sheet").isVisible());
+    assert(await page.getByText("再按一次 ESC 关闭").isVisible());
+    await page.waitForTimeout(2000);
+    assert.equal(await page.getByText("再按一次 ESC 关闭").count(), 0);
     await page.getByLabel("关闭面板", { exact: true }).focus();
     await page.keyboard.press("Shift+Tab");
     assert(
@@ -949,6 +960,8 @@ try {
         .locator(".workspace-sheet")
         .evaluate((el) => el.contains(document.activeElement)),
     );
+    await page.keyboard.press("Escape");
+    assert(await page.locator(".workspace-sheet").isVisible());
     await page.keyboard.press("Escape");
     await settle();
     assert.equal(await page.locator(".workspace-sheet").count(), 0);
@@ -1408,6 +1421,7 @@ try {
     const note = page.locator("#txn-note");
     const focused = async (locator) =>
       assert(await locator.evaluate((el) => el === document.activeElement));
+    await focused(amount);
     await page.getByLabel("关闭面板", { exact: true }).focus();
     await page.keyboard.press("Tab");
     await focused(amount);
