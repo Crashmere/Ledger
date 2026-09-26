@@ -33,7 +33,6 @@ import { useSaveGuard } from "../composables/useSaveGuard";
 import { pushToast } from "../composables/useToast";
 import { readPreference, savePreference } from "../services/preferences";
 const LAST_ACCOUNT_KEY = "last_account_id";
-const ESCAPE_CLOSE_WINDOW_MS = 2000;
 
 const route = useRoute();
 const router = useRouter();
@@ -120,8 +119,6 @@ const initError = ref("");
 const allCategories = ref<Category[]>([]);
 const feedback = ref<{ kind: "success" | "error"; msg: string } | null>(null);
 let feedbackTimer: ReturnType<typeof setTimeout> | null = null;
-const escapeHintVisible = ref(false);
-let escapeHintTimer: ReturnType<typeof setTimeout> | null = null;
 
 const amountInputEl = ref<HTMLInputElement | null>(null);
 const amountDisplayEl = ref<HTMLElement | null>(null);
@@ -466,33 +463,6 @@ function cycleEntryFields(e: KeyboardEvent): void {
   fields[next]?.focus();
 }
 
-function hideEscapeHint(): void {
-  escapeHintVisible.value = false;
-  if (escapeHintTimer) clearTimeout(escapeHintTimer);
-  escapeHintTimer = null;
-}
-
-// New entries need a second Escape so a stray key press does not discard the draft.
-function confirmEscapeClose(e: KeyboardEvent): void {
-  if (e.key !== "Escape" || isEdit.value) return;
-  if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.isComposing)
-    return;
-  if (initializing.value || initError.value || !accounts.value.length) return;
-  if (saving.value || deleting.value || document.querySelector("dialog[open]"))
-    return;
-  // Handle this before the sheet closes on Escape.
-  e.preventDefault();
-  e.stopPropagation();
-  if (e.repeat) return;
-  if (escapeHintVisible.value) {
-    hideEscapeHint();
-    goBack();
-    return;
-  }
-  escapeHintVisible.value = true;
-  escapeHintTimer = setTimeout(hideEscapeHint, ESCAPE_CLOSE_WINDOW_MS);
-}
-
 function focusAmount(): void {
   (isMobile.value ? amountInputEl.value : amountDisplayEl.value)?.focus();
 }
@@ -550,7 +520,6 @@ function resetFormState(): void {
   openPicker.value = null;
   confirmingDelete.value = false;
   initError.value = "";
-  hideEscapeHint();
 }
 
 async function initCreate(): Promise<void> {
@@ -634,7 +603,6 @@ function retryInitialization(): void {
 onMounted(() => {
   void initForm();
   window.addEventListener("keydown", cycleEntryFields, true);
-  window.addEventListener("keydown", confirmEscapeClose, true);
   window.addEventListener("keydown", onKeydown);
   document.addEventListener("click", dismissAmountKeyboard);
   window.addEventListener("ledger-reload", retryInitialization);
@@ -646,12 +614,10 @@ watch([editingId, copyingId], () => {
 
 onUnmounted(() => {
   window.removeEventListener("keydown", cycleEntryFields, true);
-  window.removeEventListener("keydown", confirmEscapeClose, true);
   window.removeEventListener("keydown", onKeydown);
   document.removeEventListener("click", dismissAmountKeyboard);
   window.removeEventListener("ledger-reload", retryInitialization);
   if (feedbackTimer) clearTimeout(feedbackTimer);
-  hideEscapeHint();
 });
 function calculatorKey(key: string) {
   const ops: Record<string, "+" | "-" | "*" | "/"> = {
@@ -892,15 +858,7 @@ function calculatorKey(key: string) {
         </p>
       </div>
       <footer class="entry-save">
-        <Transition name="entry-escape-hint"
-          ><div
-            v-if="escapeHintVisible"
-            class="entry-escape-hint"
-            role="status"
-          >
-            再按一次 ESC 关闭
-          </div></Transition
-        ><span v-if="saveUncertain" class="neg"
+        <span v-if="saveUncertain" class="neg"
           >保存结果未确认，请先核对账目。</span
         ><span v-else>{{
           isEdit ? "修改将应用于这笔交易" : "保存后可继续记录下一笔"
@@ -1115,31 +1073,6 @@ function calculatorKey(key: string) {
 }
 .entry-save > .btn {
   min-width: 125px;
-}
-.entry-escape-hint {
-  position: absolute;
-  bottom: calc(100% + 12px);
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 8px 14px;
-  border-radius: var(--r-pill);
-  background: var(--fg);
-  color: white;
-  font-size: 12px;
-  white-space: nowrap;
-  box-shadow: var(--sh-3);
-  pointer-events: none;
-}
-.entry-escape-hint-enter-active,
-.entry-escape-hint-leave-active {
-  transition:
-    opacity 160ms ease,
-    transform 160ms ease;
-}
-.entry-escape-hint-enter-from,
-.entry-escape-hint-leave-to {
-  opacity: 0;
-  transform: translate(-50%, 6px);
 }
 .entry-secondary {
   display: flex;

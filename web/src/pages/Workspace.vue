@@ -550,7 +550,9 @@ watch(isSheet, async (open) => {
   }
 });
 function trapSheet(e: KeyboardEvent) {
-  if (e.defaultPrevented) return;
+  // Safari dispatches the key that ends an IME composition after
+  // compositionend, so only keyCode 229 shows that the IME consumed it.
+  if (e.defaultPrevented || e.isComposing || e.keyCode === 229) return;
   if (e.key === "Escape") {
     e.preventDefault();
     e.stopPropagation();

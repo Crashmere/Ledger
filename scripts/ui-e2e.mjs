@@ -947,12 +947,6 @@ try {
         .getByLabel("金额（元）", { exact: true })
         .evaluate((el) => el === document.activeElement),
     );
-    await page.keyboard.press("Escape");
-    await settle();
-    assert(await page.locator(".workspace-sheet").isVisible());
-    assert(await page.getByText("再按一次 ESC 关闭").isVisible());
-    await page.waitForTimeout(2000);
-    assert.equal(await page.getByText("再按一次 ESC 关闭").count(), 0);
     await page.getByLabel("关闭面板", { exact: true }).focus();
     await page.keyboard.press("Shift+Tab");
     assert(
@@ -960,8 +954,6 @@ try {
         .locator(".workspace-sheet")
         .evaluate((el) => el.contains(document.activeElement)),
     );
-    await page.keyboard.press("Escape");
-    assert(await page.locator(".workspace-sheet").isVisible());
     await page.keyboard.press("Escape");
     await settle();
     assert.equal(await page.locator(".workspace-sheet").count(), 0);
@@ -1343,6 +1335,7 @@ try {
     "return refresh updates data, preserves filters/drafts, recovers from failure and rejects stale results PASS",
   );
   // Page shortcuts never traverse unrelated controls or intercept modal/input editing.
+  const cdp = await page.context().newCDPSession(page);
   for (const width of [1440, 375]) {
     await page.setViewportSize({ width, height: width === 375 ? 667 : 1000 });
     await go("/transactions");
@@ -1467,8 +1460,33 @@ try {
     assert.equal(await page.locator(".m-label").innerText(), initialMonth);
     if (width === 375) assert.equal(await amount.inputValue(), "12.34");
     else assert((await amount.innerText()).includes("12.34"));
-    await page.getByLabel("关闭面板", { exact: true }).click();
+    // Chrome sends the IME's Escape while composing, Safari after compositionend.
+    const imeEscape = () =>
+      cdp.send("Input.dispatchKeyEvent", {
+        type: "rawKeyDown",
+        key: "Escape",
+        code: "Escape",
+        windowsVirtualKeyCode: 229,
+      });
+    const compose = (text) =>
+      cdp.send("Input.imeSetComposition", {
+        text,
+        selectionStart: text.length,
+        selectionEnd: text.length,
+      });
+    await title.focus();
+    await compose("ni");
+    await imeEscape();
     await settle();
+    assert(await page.locator(".workspace-sheet").isVisible());
+    await compose("");
+    await imeEscape();
+    await settle();
+    assert(await page.locator(".workspace-sheet").isVisible());
+    assert.equal(await title.inputValue(), "键盘草稿");
+    await page.keyboard.press("Escape");
+    await settle();
+    assert.equal(await page.locator(".workspace-sheet").count(), 0);
     await page.keyboard.press("Tab");
     await settle();
     assert.equal(
@@ -1478,7 +1496,7 @@ try {
       "true",
     );
     console.log(
-      "page shortcuts, field cycle, modal isolation and no focus highlights PASS " +
+      "page shortcuts, field cycle, IME Escape, modal isolation and no focus highlights PASS " +
         width,
     );
   }
