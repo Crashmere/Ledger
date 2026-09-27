@@ -422,8 +422,18 @@
   width: 18px;
   height: 18px;
 }
-.data-tools > .btn {
+.filter-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 4px;
+}
+.filter-actions > .btn {
   padding: 7px 10px;
+}
+.filter-reset {
+  width: 32px;
+  height: 38px;
 }
 .filter-content {
   min-height: 0;
@@ -1024,13 +1034,16 @@
     margin-top: 5px;
   }
   .data-tools {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 9px;
     min-height: 0;
     padding: 12px 0;
   }
   .view-tabs {
     height: 40px;
+    min-width: 0;
+    max-width: 100%;
     margin-right: auto;
   }
   .view-tabs button {
@@ -1039,6 +1052,7 @@
     height: 30px;
   }
   .tool-search {
+    grid-column: 1 / -1;
     order: 3;
     width: 100%;
     padding: 10px;
@@ -1046,7 +1060,7 @@
   .tool-search input {
     font-size: 16px;
   }
-  .data-tools > .btn {
+  .filter-actions > .btn {
     padding: 5px 9px;
     min-height: 38px;
     font-size: 12px;

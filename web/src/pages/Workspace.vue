@@ -212,6 +212,7 @@ const error = ref("");
 const refreshError = ref("");
 const direction = ref<"expense" | "income">("expense");
 const filtersOpen = ref(false);
+const filterPanel = ref<InstanceType<typeof FilterPanel> | null>(null);
 let request = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 const currentQuery = () => {
@@ -462,6 +463,14 @@ watch(
     timer = setTimeout(() => void load(), 180);
   },
 );
+function resetFilters() {
+  selectedAccounts.value = [];
+  selectedCategories.value = [];
+  selectedTypes.value = [];
+  min.value = null;
+  max.value = null;
+  filterPanel.value?.resetDraft();
+}
 function selectScope(id: string) {
   selectedAccounts.value = id ? [id] : [];
   selectedCategories.value = [];
@@ -996,31 +1005,42 @@ onUnmounted(() => {
                     <AppIcon name="close" :size="13" /></button
                   ><kbd v-else class="kbd">/</kbd>
                 </div>
-                <button
-                  class="btn btn-ghost"
-                  :class="{ 'filter-active': filtersOpen }"
-                  :aria-expanded="filtersOpen"
-                  @click="filtersOpen = !filtersOpen"
-                >
-                  <AppIcon name="filter" :size="15" />筛选<span
-                    v-if="
-                      selectedTypes.length +
-                      selectedCategories.length +
-                      (min !== null || max !== null ? 1 : 0)
-                    "
-                    >·
-                    {{
-                      selectedTypes.length +
-                      selectedCategories.length +
-                      (min !== null || max !== null ? 1 : 0)
-                    }}</span
+                <div class="filter-actions">
+                  <button
+                    class="btn btn-ghost"
+                    :class="{ 'filter-active': filtersOpen }"
+                    :aria-expanded="filtersOpen"
+                    @click="filtersOpen = !filtersOpen"
                   >
-                </button>
+                    <AppIcon name="filter" :size="15" />筛选<span
+                      v-if="
+                        selectedTypes.length +
+                        selectedCategories.length +
+                        (min !== null || max !== null ? 1 : 0)
+                      "
+                      >·
+                      {{
+                        selectedTypes.length +
+                        selectedCategories.length +
+                        (min !== null || max !== null ? 1 : 0)
+                      }}</span
+                    >
+                  </button>
+                  <button
+                    class="icon-btn filter-reset"
+                    aria-label="重置筛选"
+                    title="重置筛选"
+                    @click="resetFilters"
+                  >
+                    <AppIcon name="reset" :size="17" />
+                  </button>
+                </div>
               </div>
               <Transition name="filter-reveal">
                 <div v-if="filtersOpen" class="filter-reveal">
                   <div class="filter-content">
                     <FilterPanel
+                      ref="filterPanel"
                       :accounts="accounts"
                       :categories="uniqueCategories"
                       v-model:types="selectedTypes"
@@ -1028,6 +1048,7 @@ onUnmounted(() => {
                       v-model:categoryNames="selectedCategories"
                       v-model:min="min"
                       v-model:max="max"
+                      @reset="resetFilters"
                       allow-transfer
                       always-open
                     />

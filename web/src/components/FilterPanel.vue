@@ -9,6 +9,7 @@ const props = defineProps<{
   allowTransfer?: boolean;
   alwaysOpen?: boolean;
 }>();
+const emit = defineEmits<{ reset: [] }>();
 const types = defineModel<TxnType[]>("types", { required: true });
 const accountIds = defineModel<string[]>("accountIds", { required: true });
 const categoryNames = defineModel<string[]>("categoryNames", {
@@ -74,16 +75,12 @@ function applyAmount() {
       "请输入非负金额，最多两位小数，最低金额不能大于最高金额。";
   }
 }
-function reset() {
-  types.value = [];
-  accountIds.value = [];
-  categoryNames.value = [];
-  min.value = null;
-  max.value = null;
+function resetDraft() {
   minInput.value = "";
   maxInput.value = "";
   amountError.value = "";
 }
+defineExpose({ resetDraft });
 </script>
 <template>
   <section class="filters">
@@ -141,7 +138,9 @@ function reset() {
         {{ max === null ? "不限" : max / 100
         }}<AppIcon name="close" :size="12" />
       </button>
-      <button v-if="count" class="text-button" @click="reset">清空筛选</button>
+      <button v-if="count" class="text-button" @click="emit('reset')">
+        清空筛选
+      </button>
     </div>
     <div
       v-if="open || alwaysOpen"
