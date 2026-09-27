@@ -1,6 +1,6 @@
 # Ledger 部署与维护
 
-公网入口使用可信 IP 证书的 HTTPS，原有 /ledger/ 路径保持。公网 HTTP 返回 308；API 客户端直接使用 HTTPS。Nginx 覆盖 `X-Forwarded-Proto`；写入来源校验只信任来自回环地址的代理头，仍拒绝跨站来源。证书、续期、回退和整机验收见 [共享 HTTPS 运维](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/https.md)（服务器副本 /opt/server-context/references/https.md）。本项目的后端与发布检查保留本机 HTTP，127.0.0.1:80 的代理检查入口不能从公网访问。HTTPS 只加密传输，登录认证尚未接入。
+公网入口使用可信 IP 证书的 HTTPS，原有 /ledger/ 路径保持。公网 HTTP 返回 308；API 客户端直接使用 HTTPS。Nginx 覆盖 `X-Forwarded-Proto`；写入来源校验只信任来自回环地址的代理头，仍拒绝跨站来源。证书、续期、回退和整机验收见 [共享 HTTPS 运维](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/https.md)（服务器副本 /opt/server-context/references/https.md）。本项目的后端与发布检查保留本机 HTTP，127.0.0.1:80 的代理检查入口不能从公网访问。公网已接入 ServerPortal 统一设备认证：先在 /portal/login 输入口令授权设备，随后使用同源 Secure/HttpOnly Cookie 访问；未授权 API 返回 401。本机发布检查与服务间调用保留。
 
 本文负责 Ledger 本身。先读 [文档入口](README.md)；共享主机、Nginx server 和跨项目规则见 `/opt/server-context/SKILL.md` 或 [server-operations 源](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/SKILL.md)。不要用本项目配置覆盖其他应用的共享入口。
 
@@ -14,7 +14,7 @@
 浏览器 /ledger/ → 共享 Nginx HTTPS :443 → Go 127.0.0.1:18080 → SQLite 文件
 ```
 
-管理员使用 SSH 别名 `ali`，真实地址由本地 SSH 配置维护。使用 IP 证书、无域名、无登录，用户接受知址可读写。Go 二进制内嵌 Vue 页面，服务器无需前端进程、Go 编译器、Docker 或数据库服务；主机已有其他用途的软件以共享清单为准。
+管理员使用 SSH 别名 `ali`，真实地址由本地 SSH 配置维护。使用 IP 证书与统一设备认证，无域名；授权设备可读写。Go 二进制内嵌 Vue 页面，服务器无需前端进程、Go 编译器、Docker 或数据库服务；主机已有其他用途的软件以共享清单为准。
 
 ```text
 /opt/ledger/
@@ -232,6 +232,6 @@ GitHub 上传超时按 [CICD](CICD.md#查看状态和回退) 指向的共享备�
 
 ## ServerPortal 接入材料
 
-已在源码登记 `deploy/portal.json`，待门户上线时安装到本项目 config 目录。声明包含真实目录用途、只读浏览权限、数据库、API、端口、unit 与原生 backup 契约。生产目前仍以本文开头和共享 current-state 的访问方式为准；本次只增加接入材料，没有切换认证或执行清理。
+`deploy/portal.json` 已安装到本项目 config 目录，由 root 管理。声明包含目录用途、只读浏览权限、数据库、API、端口、unit 与原生 backup 契约。门户 /portal/ 已上线并统一保护公网访问；没有执行生产数据或历史备份清理。
 
-维护数据根、媒体、备份格式、unit、端口或路径时，同时修改声明和对应文档；安装后通过门户核对资源覆盖与隔离恢复。ServerPortal 的加密整机材料备份覆盖本项目当前数据、配置、程序、文档、发布身份公钥及可选历史备份/版本；不得以复制活动 WAL 主文件代替本项目原生 backup。统一认证启用后，公网页面和接口由设备凭据保护，本机发布检查仍保留。
+维护数据根、媒体、备份格式、unit、端口或路径时，同时修改声明和对应文档；安装后通过门户核对资源覆盖与隔离恢复。ServerPortal 的加密整机材料备份覆盖本项目当前数据、配置、程序、文档、发布身份公钥及可选历史备份/版本；不得以复制活动 WAL 主文件代替本项目原生 backup。公网页面和接口已由统一设备凭据保护，本机发布检查仍保留。

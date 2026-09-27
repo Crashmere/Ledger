@@ -1,6 +1,6 @@
 # HTTP API
 
-同源 /api，JSON 使用 camelCase。金额为整数分，epoch 时间为毫秒，日期字符串为北京时间 YYYY-MM-DD。无登录。所有 API 响应 Cache-Control: no-store，成功返回 200。
+同源 /api，JSON 使用 camelCase。金额为整数分，epoch 时间为毫秒，日期字符串为北京时间 YYYY-MM-DD。公网 API 需要统一设备认证 Cookie。本机后端仅供受信调用。所有 API 响应 Cache-Control: no-store，成功返回 200。
 
 挂载到 /ledger/ 时，浏览器使用 /ledger/api；Nginx 去掉 /ledger 前缀再转发。下文资源地址均相对 API 根路径。
 
