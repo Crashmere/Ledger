@@ -1,0 +1,156 @@
+{
+  "id": "ledger",
+  "name": "Ledger",
+  "description": "清晰记录每一笔收入与支出。",
+  "icon": "/portal/static/icons/ledger.png",
+  "url": "/ledger/",
+  "repo": "https://github.com/Crashmere/Ledger",
+  "root": "/opt/ledger",
+  "port": 18080,
+  "user": "ledger",
+  "units": [
+    "ledger.service",
+    "ledger-backup.service",
+    "ledger-backup.timer"
+  ],
+  "database": "/opt/ledger/data/ledger.sqlite",
+  "backupKind": "sqlite",
+  "resources": [
+    {
+      "id": "data",
+      "name": "业务数据",
+      "path": "/opt/ledger/data",
+      "purpose": "数据库、图片与历史迁移材料；临时文件不属于恢复数据。",
+      "kind": "data",
+      "browse": true,
+      "cleanup": false
+    },
+    {
+      "id": "backups",
+      "name": "数据备份",
+      "path": "/opt/ledger/backups",
+      "purpose": "daily、manual 与 before-deploy 一致性快照。",
+      "kind": "backups",
+      "browse": true,
+      "cleanup": true
+    },
+    {
+      "id": "releases",
+      "name": "部署版本",
+      "path": "/opt/ledger/releases",
+      "purpose": "程序、发布结果与 previous 回退材料。",
+      "kind": "releases",
+      "browse": true,
+      "cleanup": true
+    },
+    {
+      "id": "config",
+      "name": "运行配置",
+      "path": "/opt/ledger/config",
+      "purpose": "环境配置、systemd、Nginx 与资源声明；不直接展示秘密。",
+      "kind": "config",
+      "browse": false,
+      "cleanup": false
+    },
+    {
+      "id": "bin",
+      "name": "服务程序",
+      "path": "/opt/ledger/bin",
+      "purpose": "当前应用程序及固定维护/发布脚本。",
+      "kind": "binaries",
+      "browse": false,
+      "cleanup": false
+    },
+    {
+      "id": "docs",
+      "name": "维护文档",
+      "path": "/opt/ledger/docs",
+      "purpose": "架构、API、运维与恢复说明。",
+      "kind": "documents",
+      "browse": true,
+      "cleanup": false
+    }
+  ],
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/api/ledger/info",
+      "description": "timezone、today、earliestMonth（空账本为 null）"
+    },
+    {
+      "method": "GET",
+      "path": "/api/accounts",
+      "description": "{items: Account[], totalBalance}，每个账户含实时 balance"
+    },
+    {
+      "method": "POST",
+      "path": "/api/accounts",
+      "description": "完整 AccountInput，返回 Account"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/accounts/:id",
+      "description": "完整 AccountInput，返回 Account"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/accounts/:id",
+      "description": "没有有效分类和交易时标记删除"
+    },
+    {
+      "method": "POST",
+      "path": "/api/accounts/reorder",
+      "description": "{ids: [...]}，包含全部有效账户"
+    },
+    {
+      "method": "GET",
+      "path": "/api/categories?accountId=...",
+      "description": "Category[]；省略 accountId 返回全部有效分类"
+    },
+    {
+      "method": "POST",
+      "path": "/api/categories",
+      "description": "{name,color,accountId}"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/categories/:id",
+      "description": "{name,color}，不能更换所属账户"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/categories/:id",
+      "description": "解除有效交易引用并标记删除"
+    },
+    {
+      "method": "POST",
+      "path": "/api/accounts/:id/categories/reorder",
+      "description": "{ids: [...]}，包含该账户全部有效分类"
+    },
+    {
+      "method": "GET",
+      "path": "/api/transactions/:id",
+      "description": "含 date 的完整交易"
+    },
+    {
+      "method": "POST",
+      "path": "/api/transactions",
+      "description": "完整 TransactionInput"
+    },
+    {
+      "method": "POST",
+      "path": "/api/transactions/:id/fabricworld",
+      "description": "已保存的目标交易同步到 FabricWorld，返回 {fabricId,editUrl}"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/transactions/:id",
+      "description": "完整 TransactionInput"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/transactions/:id",
+      "description": "标记删除"
+    }
+  ]
+}
