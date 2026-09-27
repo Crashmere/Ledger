@@ -231,6 +231,11 @@ function reset() {
 .filters {
   min-width: 0;
 }
+.filter-line,
+.filter-tag {
+  /* Reserve a chip row even when only the empty-state hint is visible. */
+  min-height: 30px;
+}
 .filter-line {
   display: flex;
   align-items: center;
