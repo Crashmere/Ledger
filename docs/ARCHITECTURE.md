@@ -18,6 +18,8 @@ SQLite 使用 WAL、外键和一个连接。多步保存用事务，普通查询
 
 ## 页面与共享组件
 
+手机视口采用浏览器默认安全区布局，不启用 `viewport-fit=cover`。顶栏仍位于 `.work-area` 滚动区之外，不随正文滚走；无需再加一层 fixed/sticky。与其他应用的代码对照和 iPhone 主屏幕验证边界见 [顶部安全区说明](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/common-issues.md#iphone-主屏幕页面顶部发虚)。
+
 | 组件 | 内容与主要交互 |
 | --- | --- |
 | Workspace.vue | 账户范围、余额、日期/搜索/筛选、汇总、分页明细、详情与临时排除；管理嵌套面板、焦点、断网重连和路由状态 |
