@@ -266,13 +266,6 @@
   justify-content: flex-end;
   flex-wrap: wrap;
 }
-.range-select {
-  border: 1px solid var(--border);
-  padding: 9px 10px;
-  border-radius: 10px;
-  background: white;
-  font-size: 12px;
-}
 .custom-range {
   display: flex;
   gap: 7px;
@@ -969,11 +962,6 @@
   }
   .period-controls .scope-balance b {
     font-size: 14px;
-  }
-  .range-select {
-    font-size: 12px;
-    padding: 8px;
-    min-height: 36px;
   }
   .custom-range {
     width: 100%;

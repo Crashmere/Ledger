@@ -29,6 +29,7 @@ import WorkspaceMenu from "../components/WorkspaceMenu.vue";
 import FilterPanel from "../components/FilterPanel.vue";
 import InsightView from "../components/InsightView.vue";
 import MonthSwitch from "../components/MonthSwitch.vue";
+import RangeSelect from "../components/RangeSelect.vue";
 import Pagination from "../components/Pagination.vue";
 import PageSkeleton from "../components/PageSkeleton.vue";
 import LoadError from "../components/LoadError.vue";
@@ -212,6 +213,7 @@ const error = ref("");
 const refreshError = ref("");
 const direction = ref<"expense" | "income">("expense");
 const filtersOpen = ref(false);
+const rangeMenuOpen = ref(false);
 const filterPanel = ref<InstanceType<typeof FilterPanel> | null>(null);
 let request = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -589,6 +591,7 @@ function globalKey(e: KeyboardEvent) {
     e.isComposing ||
     connectionUnavailable.value ||
     isSheet.value ||
+    rangeMenuOpen.value ||
     document.querySelector("dialog[open]")
   )
     return;
@@ -856,17 +859,8 @@ onUnmounted(() => {
               </p>
             </div>
             <div class="period-controls">
-              <select
-                v-model="range"
-                class="range-select"
-                aria-label="时间范围"
-              >
-                <option value="month">按月</option>
-                <option value="30d">近 30 天</option>
-                <option value="year">本年</option>
-                <option value="all">全部时间</option>
-                <option value="custom">自定义</option></select
-              ><MonthSwitch v-if="range === 'month'" />
+              <RangeSelect v-model="range" v-model:open="rangeMenuOpen" />
+              <MonthSwitch v-if="range === 'month'" />
               <div v-if="range === 'custom'" class="custom-range">
                 <input
                   class="input"

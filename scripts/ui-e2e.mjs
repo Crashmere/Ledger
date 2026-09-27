@@ -203,6 +203,12 @@ try {
     await page.goto(base + path);
     await settle();
   };
+  const chooseRange = async (value) => {
+    const labels = { month: "按月", "30d": "近 30 天", year: "本年", all: "全部时间", custom: "自定义" };
+    await page.getByRole("combobox", { name: "时间范围", exact: true }).click();
+    await page.getByRole("option", { name: labels[value], exact: true }).click();
+    await page.getByRole("listbox", { name: "时间范围选项" }).waitFor({ state: "detached" });
+  };
   const api = async (path, body, method = body ? "POST" : "GET") => {
     if (body?.filter?.keyword)
       body.filter.searchFields = ["title", "note", "category"];
@@ -214,6 +220,99 @@ try {
     assert(r.ok, await r.clone().text());
     return r.json();
   };
+  // Custom range selection must not move content or trigger background shortcuts.
+  for (const width of [1440, 375, 320]) {
+    await page.setViewportSize({ width, height: width > 600 ? 1000 : 667 });
+    await go("/transactions?types=expense&q=" + encodeURIComponent("午餐"));
+    const trigger = page.getByRole("combobox", { name: "时间范围", exact: true });
+    const menu = page.getByRole("listbox", { name: "时间范围选项" });
+    const initialQuery = new URL(page.url()).search;
+    const heading = await page.locator(".work-heading").boundingBox();
+    const metrics = await page.locator(".work-metrics").boundingBox();
+    await trigger.focus();
+    await page.keyboard.press("ArrowDown");
+    await page.waitForTimeout(240);
+    assert.equal(await trigger.getAttribute("aria-expanded"), "true");
+    assert.equal(await menu.getByRole("option").count(), 5);
+    assert.equal(await menu.getByRole("option", { name: "按月", exact: true }).getAttribute("aria-selected"), "true");
+    assert.deepEqual(await page.locator(".work-heading").boundingBox(), heading);
+    assert.deepEqual(await page.locator(".work-metrics").boundingBox(), metrics);
+    const popup = await menu.boundingBox();
+    assert(popup.x >= 8 && popup.x + popup.width <= width - 8);
+    assert(popup.y >= 8 && popup.y + popup.height <= (width > 600 ? 1000 : 667) - 8);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await page.screenshot({ path: resolve(output, `range-menu-${width}.png`) });
+    const monthLabel = await page.locator(".m-label").textContent();
+    await page.keyboard.press("ArrowLeft");
+    assert.equal(await page.locator(".m-label").textContent(), monthLabel);
+    await page.keyboard.press("ArrowDown");
+    assert.equal(await trigger.getAttribute("aria-activedescendant"), await menu.getByRole("option", { name: "近 30 天" }).getAttribute("id"));
+    await page.keyboard.press("Escape");
+    await menu.waitFor({ state: "detached" });
+    assert.equal(new URL(page.url()).search, initialQuery);
+    assert(await trigger.evaluate(el => el === document.activeElement));
+    await trigger.click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await settle();
+    assert.equal(await trigger.textContent(), "自定义");
+    assert(await page.getByLabel("起始日期", { exact: true }).isVisible());
+    for (const range of ["30d", "year", "all", "month"]) {
+      await chooseRange(range);
+      await settle();
+      const query = new URL(page.url()).searchParams;
+      assert.equal(query.get("range"), range === "month" ? null : range);
+      assert.equal(query.get("types"), "expense");
+      assert.equal(query.get("q"), "午餐");
+    }
+    await trigger.click();
+    await page.keyboard.press("Tab");
+    await menu.waitFor({ state: "detached" });
+    assert.equal(await page.getByRole("tab", { name: "明细" }).getAttribute("aria-selected"), "true");
+    await trigger.click();
+    await page.getByRole("tab", { name: "明细" }).click();
+    await menu.waitFor({ state: "detached" });
+    await trigger.click();
+    await page.locator(".work-area").evaluate(el => el.scrollTop = 80);
+    await menu.waitFor({ state: "detached" });
+    await trigger.click(); // Clicking a scrolled-away trigger must still open reliably.
+    await page.waitForTimeout(240);
+    assert(await menu.isVisible());
+    await page.keyboard.press("Escape");
+    await menu.waitFor({ state: "detached" });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await trigger.click();
+    assert.equal(await menu.evaluate(el => getComputedStyle(el).transitionDuration), "0s");
+    assert.equal(await page.locator(".range-chevron").evaluate(el => getComputedStyle(el).transitionDuration), "0s");
+    await page.keyboard.press("Escape");
+    await menu.waitFor({ state: "detached" });
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    console.log("custom range menu, keyboard, layout and reduced motion PASS " + width);
+  }
+  // A short viewport uses the larger side and scrolls the selected option into view.
+  await page.setViewportSize({ width: 375, height: 300 });
+  await go("/transactions?range=custom&from=" + month + "-01&to=" + today);
+  await page.getByRole("combobox", { name: "时间范围", exact: true }).click();
+  await page.waitForTimeout(240);
+  const shortMenu = page.getByRole("listbox", { name: "时间范围选项" });
+  const shortBox = await shortMenu.boundingBox();
+  const selectedBox = await shortMenu.getByRole("option", { name: "自定义" }).boundingBox();
+  assert(shortBox.y >= 8 && shortBox.y + shortBox.height <= 292);
+  assert(selectedBox.y >= shortBox.y && selectedBox.y + selectedBox.height <= shortBox.y + shortBox.height);
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Enter");
+  await settle();
+  assert.equal(new URL(page.url()).searchParams.get("range"), null);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const touchPage = await browser.newPage({
+    viewport: { width: 375, height: 667 }, isMobile: true, hasTouch: true,
+  });
+  await touchPage.goto(base + "/transactions");
+  await touchPage.getByRole("combobox", { name: "时间范围", exact: true }).tap();
+  await touchPage.getByRole("option", { name: "本年", exact: true }).tap();
+  await touchPage.waitForURL(url => url.searchParams.get("range") === "year");
+  assert.equal(await touchPage.getByRole("combobox", { name: "时间范围", exact: true }).textContent(), "本年");
+  await touchPage.close();
   try {
     await go("/overview");
     assert(page.url().includes("/transactions"));
@@ -488,7 +587,7 @@ try {
     await page
       .getByRole("button", { name: "旅行计划专项", exact: true })
       .click();
-    await page.getByLabel("时间范围", { exact: true }).selectOption("all");
+    await chooseRange("all");
     await settle();
     assert.equal(await page.locator(".transaction-line").count(), 1);
     console.log("transfer project amount validation PASS");
@@ -583,7 +682,7 @@ try {
       "minimum visible income/expense heights, true zero, baseline and exact amount PASS",
     );
     await go("/reports");
-    await page.getByLabel("时间范围", { exact: true }).selectOption("year");
+    await chooseRange("year");
     await settle();
     const year = Number(f.today.slice(0, 4));
     const yearDays =
@@ -630,7 +729,7 @@ try {
         year + "-12-31",
       ),
     );
-    await page.getByLabel("时间范围", { exact: true }).selectOption("custom");
+    await chooseRange("custom");
     await page.getByLabel("起始日期").fill("2024-01-01");
     await page.getByLabel("结束日期").fill("2026-12-31");
     await settle();
@@ -667,11 +766,11 @@ try {
     console.log(
       "year insights layout, trend grouping, leap-year calendar and no keyboard selection PASS",
     );
-    await page.getByLabel("时间范围", { exact: true }).selectOption("30d");
+    await chooseRange("30d");
     await settle();
     assert.equal(await page.locator(".heatmap-day").count(), 30);
     assert.equal(await page.locator(".trend-point").count(), 30);
-    await page.getByLabel("时间范围", { exact: true }).selectOption("custom");
+    await chooseRange("custom");
     await page.getByLabel("起始日期").fill(f.month + "-01");
     await page.getByLabel("结束日期").fill(f.month + "-10");
     await settle();
@@ -685,7 +784,7 @@ try {
         .getByRole("tab", { name: "明细", exact: true })
         .getAttribute("aria-selected")) === "true",
     );
-    await page.getByLabel("时间范围", { exact: true }).selectOption("month");
+    await chooseRange("month");
     await settle();
     assert(!new URL(page.url()).searchParams.has("from"));
     console.log("report ranges and drilldown PASS");
@@ -771,10 +870,10 @@ try {
     await settle();
     assert.equal(await page.locator(".transaction-line").count(), 1);
     assert.equal(
-      await page.getByLabel("时间范围", { exact: true }).inputValue(),
-      "all",
+      await page.getByRole("combobox", { name: "时间范围", exact: true }).textContent(),
+      "全部时间",
     );
-    await page.getByLabel("时间范围", { exact: true }).selectOption("month");
+    await chooseRange("month");
     await settle();
     assert.equal(
       await page.locator(".transaction-line").count(),

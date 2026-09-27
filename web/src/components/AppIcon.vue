@@ -19,6 +19,8 @@ const paths: Record<string, string> = {
   copy: 'M9 9h11v11H9zM5 15H3V3h12v2',
   filter: 'M4 6h16M7 12h10m-7 6h4',
   reset: 'M3 4v6h6M3 10a9 9 0 1 1 2.6 8.4',
+  'chevron-down': 'm6 9 6 6 6-6',
+  check: 'm5 12 4 4L19 6',
   calendar: 'M4 5h16v16H4zM8 3v4m8-4v4M4 10h16',
 };
 </script>
