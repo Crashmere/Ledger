@@ -256,10 +256,7 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 			origin := r.Header.Get("Origin")
 			if origin != "" {
 				u, e := url.Parse(origin)
-				scheme := "http"
-				if r.TLS != nil {
-					scheme = "https"
-				}
+				scheme := requestScheme(r)
 				if e != nil || u.Host != r.Host || u.Scheme != scheme {
 					respond(w, 403, map[string]any{"error": ledger.Error{Code: "ORIGIN", Message: "不允许跨站请求"}})
 					return
