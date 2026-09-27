@@ -1,18 +1,20 @@
 # Ledger 部署与维护
 
+公网入口使用可信 IP 证书的 HTTPS，原有 /ledger/ 路径保持。公网 HTTP 返回 308；API 客户端直接使用 HTTPS。Nginx 覆盖 `X-Forwarded-Proto`；写入来源校验只信任来自回环地址的代理头，仍拒绝跨站来源。证书、续期、回退和整机验收见 [共享 HTTPS 运维](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/https.md)（服务器副本 /opt/server-context/references/https.md）。本项目的后端与发布检查保留本机 HTTP，127.0.0.1:80 的代理检查入口不能从公网访问。HTTPS 只加密传输，登录认证尚未接入。
+
 本文负责 Ledger 本身。先读 [文档入口](README.md)；共享主机、Nginx server 和跨项目规则见 `/opt/server-context/SKILL.md` 或 [server-operations 源](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/SKILL.md)。不要用本项目配置覆盖其他应用的共享入口。
 
 目录： [当前部署](#当前部署) · [只读查看](#只读查看) · [构建与首次安装](#构建与首次安装) · [备份](#备份) · [恢复](#恢复) · [程序和配置更新](#程序和配置更新) · [数据库升级](#数据库升级) · [文档同步](#文档同步) · [排查](#排查)
 
 ## 当前部署
 
-现场核对日期：2026-09-16。版本、PID、磁盘占用和最新备份文件名通过下文命令查看，不把不断变化的值写死在文档。
+现场核对日期：2026-09-27。版本、PID、磁盘占用和最新备份文件名通过下文命令查看，不把不断变化的值写死在文档。
 
 ```text
-浏览器 /ledger/ → 共享 Nginx :80 → Go 127.0.0.1:18080 → SQLite 文件
+浏览器 /ledger/ → 共享 Nginx HTTPS :443 → Go 127.0.0.1:18080 → SQLite 文件
 ```
 
-管理员使用 SSH 别名 `ali`，真实地址由本地 SSH 配置维护。无域名/TLS、无登录，用户接受知址可读写。Go 二进制内嵌 Vue 页面，服务器无需前端进程、Go 编译器、Docker 或数据库服务；主机已有其他用途的软件以共享清单为准。
+管理员使用 SSH 别名 `ali`，真实地址由本地 SSH 配置维护。使用 IP 证书、无域名、无登录，用户接受知址可读写。Go 二进制内嵌 Vue 页面，服务器无需前端进程、Go 编译器、Docker 或数据库服务；主机已有其他用途的软件以共享清单为准。
 
 ```text
 /opt/ledger/
