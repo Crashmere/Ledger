@@ -35,7 +35,7 @@ make build
 
 部署到共享服务器的 `/ledger/` 路径时，使用 `make linux BASE_PATH=/ledger/`。它同时设置静态资源、Vue Router 和 API 前缀；Nginx 去掉此前缀后转发给 Go。默认构建和本地开发仍使用根路径。详见 [部署维护](docs/OPERATIONS.md)。
 
-仓库配置了 [自动检查与部署](docs/DEPLOYMENT.md)：PR 只验证，推送 main 验证成功后自动发布到服务器。每次发布先备份数据库，失败回退程序，不覆盖账本。
+发布使用[本机部署入口](docs/DEPLOYMENT.md)：本地验证本次功能后执行 `make deploy`，GitHub 仅备份源码。每次发布先备份数据库，失败回退程序，不覆盖账本。
 
 测试使用临时合成账本，不读取个人财务数据。涵盖转账与删除、筛选、分页完整小计、历史时间、闰年、批量原子性、HTTP 表单、深链接、备份恢复，以及旧库升级后的逐字段保留和失败回滚。
 

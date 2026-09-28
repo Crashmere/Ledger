@@ -31,7 +31,7 @@
   data/ledger.sqlite         唯一正式账本；可能伴随 -wal、-shm
   backups/                   daily、手工与发布前备份
   current-commit             当前程序对应的 Git 提交
-  releases/                  每次自动发布的程序、上一版本及结果
+  releases/                  每次本机发布的程序、上一版本及结果
   docs/                      当前项目文档和 SOURCE 来源标记
   deploy-user/.ssh/           本机专用发布公钥与强制命令配置
 ```
