@@ -74,6 +74,11 @@
   "apis": [
     {
       "method": "GET",
+      "path": "/healthz",
+      "description": "数据库连接健康，返回 {status:\"ok\"}"
+    },
+    {
+      "method": "GET",
       "path": "/api/ledger/info",
       "description": "timezone、today、earliestMonth（空账本为 null）"
     },
@@ -89,12 +94,12 @@
     },
     {
       "method": "PUT",
-      "path": "/api/accounts/:id",
+      "path": "/api/accounts/{id}",
       "description": "完整 AccountInput，返回 Account"
     },
     {
       "method": "DELETE",
-      "path": "/api/accounts/:id",
+      "path": "/api/accounts/{id}",
       "description": "没有有效分类和交易时标记删除"
     },
     {
@@ -104,8 +109,8 @@
     },
     {
       "method": "GET",
-      "path": "/api/categories?accountId=...",
-      "description": "Category[]；省略 accountId 返回全部有效分类"
+      "path": "/api/categories",
+      "description": "Category[]；可选查询参数 accountId，省略时返回全部有效分类"
     },
     {
       "method": "POST",
@@ -114,22 +119,22 @@
     },
     {
       "method": "PUT",
-      "path": "/api/categories/:id",
+      "path": "/api/categories/{id}",
       "description": "{name,color}，不能更换所属账户"
     },
     {
       "method": "DELETE",
-      "path": "/api/categories/:id",
+      "path": "/api/categories/{id}",
       "description": "解除有效交易引用并标记删除"
     },
     {
       "method": "POST",
-      "path": "/api/accounts/:id/categories/reorder",
+      "path": "/api/accounts/{id}/categories/reorder",
       "description": "{ids: [...]}，包含该账户全部有效分类"
     },
     {
       "method": "GET",
-      "path": "/api/transactions/:id",
+      "path": "/api/transactions/{id}",
       "description": "含 date 的完整交易"
     },
     {
@@ -139,18 +144,48 @@
     },
     {
       "method": "POST",
-      "path": "/api/transactions/:id/fabricworld",
+      "path": "/api/transactions/{id}/fabricworld",
       "description": "已保存的目标交易同步到 FabricWorld，返回 {fabricId,editUrl}"
     },
     {
       "method": "PUT",
-      "path": "/api/transactions/:id",
+      "path": "/api/transactions/{id}",
       "description": "完整 TransactionInput"
     },
     {
       "method": "DELETE",
-      "path": "/api/transactions/:id",
+      "path": "/api/transactions/{id}",
       "description": "标记删除"
+    },
+    {
+      "method": "POST",
+      "path": "/api/transactions/query",
+      "description": "通用筛选、分页与排序，返回明细及可选的完整日小计"
+    },
+    {
+      "method": "POST",
+      "path": "/api/statistics/summary",
+      "description": "筛选范围内的收支、净额、笔数、账户流入流出与年化"
+    },
+    {
+      "method": "POST",
+      "path": "/api/statistics/categories",
+      "description": "按分类 ID 或名称汇总收入、支出及笔数"
+    },
+    {
+      "method": "POST",
+      "path": "/api/statistics/daily",
+      "description": "指定日期范围的每日收支与热力图等级"
+    },
+    {
+      "method": "POST",
+      "path": "/api/transactions/batch/preview",
+      "description": "校验 1–500 行文本批量记账，返回逐行结果与合计，不写入"
+    },
+    {
+      "method": "POST",
+      "path": "/api/transactions/batch",
+      "description": "再次校验并原子保存整批交易"
     }
   ]
 }

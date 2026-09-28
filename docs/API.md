@@ -2,7 +2,7 @@
 
 同源 /api，JSON 使用 camelCase。金额为整数分，epoch 时间为毫秒，日期字符串为北京时间 YYYY-MM-DD。公网 API 需要统一设备认证 Cookie。本机后端仅供受信调用。所有 API 响应 Cache-Control: no-store，成功返回 200。
 
-挂载到 /ledger/ 时，浏览器使用 /ledger/api；Nginx 去掉 /ledger 前缀再转发。下文资源地址均相对 API 根路径。
+挂载到 /ledger/ 时，浏览器使用 /ledger/api；Nginx 去掉 /ledger 前缀再转发。下文列出 Go 服务内部完整路径，`{id}` 为路径参数，查询参数和请求体另行说明。
 
 错误示例：
 
@@ -12,28 +12,37 @@
 
 VALIDATION=400、NOT_FOUND=404、RESTRICT=409、ORIGIN=403、INTERNAL=500。未知字段、无效 JSON、超出 2MiB 的请求被拒绝。写请求要求完整表单字段；可空字段显式传 null。连接中断不能据此判断是否提交成功，客户端不自动重试写请求。
 
-交易响应包含只读 fabricWorldEligible：有效账户名为“副业”、有效所属分类名为“纺织”的 expense 为 true。POST /transactions/:id/fabricworld 仅接受满足条件的已有交易，由服务器读取字段并请求 FabricWorld；成功返回 fabricId 和同源 editUrl，失败返回 FABRICWORLD（502，上游不可用/失败；503，未配置）。此接口可手动安全重试，交易本身不会再次保存。批量保存响应额外包含 fabricWorldTransactions（目标交易数组，无目标时省略），预览不包含已保存交易。
+交易响应包含只读 fabricWorldEligible：有效账户名为“副业”、有效所属分类名为“纺织”的 expense 为 true。POST /api/transactions/{id}/fabricworld 仅接受满足条件的已有交易，由服务器读取字段并请求 FabricWorld；成功返回 fabricId 和同源 editUrl，失败返回 FABRICWORLD（502，上游不可用/失败；503，未配置）。此接口可手动安全重试，交易本身不会再次保存。批量保存响应额外包含 fabricWorldTransactions（目标交易数组，无目标时省略），预览不包含已保存交易。
 
 ## 资源
 
 | 方法与地址 | 输入 / 返回 |
 | --- | --- |
-| GET /ledger/info | timezone、today、earliestMonth（空账本为 null） |
-| GET /accounts | {items: Account[], totalBalance}，每个账户含实时 balance |
-| POST /accounts | 完整 AccountInput，返回 Account |
-| PUT /accounts/:id | 完整 AccountInput，返回 Account |
-| DELETE /accounts/:id | 没有有效分类和交易时标记删除 |
-| POST /accounts/reorder | {ids: [...]}，包含全部有效账户 |
-| GET /categories?accountId=... | Category[]；省略 accountId 返回全部有效分类 |
-| POST /categories | {name,color,accountId} |
-| PUT /categories/:id | {name,color}，不能更换所属账户 |
-| DELETE /categories/:id | 解除有效交易引用并标记删除 |
-| POST /accounts/:id/categories/reorder | {ids: [...]}，包含该账户全部有效分类 |
-| GET /transactions/:id | 含 date 的完整交易 |
-| POST /transactions | 完整 TransactionInput |
-| POST /transactions/:id/fabricworld | 已保存的目标交易同步到 FabricWorld，返回 {fabricId,editUrl} |
-| PUT /transactions/:id | 完整 TransactionInput |
-| DELETE /transactions/:id | 标记删除 |
+| GET /healthz | 数据库连接健康，返回 {status:"ok"} |
+| GET /api/ledger/info | timezone、today、earliestMonth（空账本为 null） |
+| GET /api/accounts | {items: Account[], totalBalance}，每个账户含实时 balance |
+| POST /api/accounts | 完整 AccountInput，返回 Account |
+| PUT /api/accounts/{id} | 完整 AccountInput，返回 Account |
+| DELETE /api/accounts/{id} | 没有有效分类和交易时标记删除 |
+| POST /api/accounts/reorder | {ids: [...]}，包含全部有效账户 |
+| GET /api/categories | Category[]；可选查询参数 accountId，省略时返回全部有效分类 |
+| POST /api/categories | {name,color,accountId} |
+| PUT /api/categories/{id} | {name,color}，不能更换所属账户 |
+| DELETE /api/categories/{id} | 解除有效交易引用并标记删除 |
+| POST /api/accounts/{id}/categories/reorder | {ids: [...]}，包含该账户全部有效分类 |
+| GET /api/transactions/{id} | 含 date 的完整交易 |
+| POST /api/transactions | 完整 TransactionInput |
+| POST /api/transactions/{id}/fabricworld | 已保存的目标交易同步到 FabricWorld，返回 {fabricId,editUrl} |
+| PUT /api/transactions/{id} | 完整 TransactionInput |
+| DELETE /api/transactions/{id} | 标记删除 |
+| POST /api/transactions/query | 通用筛选、分页与排序，返回明细及可选的完整日小计 |
+| POST /api/statistics/summary | 筛选范围内的收支、净额、笔数、账户流入流出与年化 |
+| POST /api/statistics/categories | 按分类 ID 或名称汇总收入、支出及笔数 |
+| POST /api/statistics/daily | 指定日期范围的每日收支与热力图等级 |
+| POST /api/transactions/batch/preview | 校验 1–500 行文本批量记账，返回逐行结果与合计，不写入 |
+| POST /api/transactions/batch | 再次校验并原子保存整批交易 |
+
+本表覆盖当前业务与健康接口；门户的 `deploy/portal.json.apis` 与本表保持一致。每个方法和路径单独登记，参数写入用途或下文契约，不拼入路径字段。 核对与同步流程见[共享排障说明](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/common-issues.md#门户-api-列表与服务不一致)。
 
 删除和排序返回 {ok:true}。账户、分类 ID 由服务器生成。AccountInput：
 
@@ -51,7 +60,7 @@ TransactionInput：
 
 type 为 income/expense/transfer。转账必须有不同的转入账户，categoryId 必须为 null；普通收支的 toAccountId 为 null。金额必须为正整数，最多 9007199254740991 分。新交易取北京零点；编辑日期没变时保留历史时间。
 
-交易响应使用 Transaction，不包含 tags。标签资源已移除，/tags 及其子路径返回 404；交易表单和筛选中的 tagIds 按未知字段返回 400，searchFields 中的 tag 也返回 400。升级后旧页面须重新加载以使用当前契约。
+交易响应使用 Transaction，不包含 tags。标签资源已移除，/api/tags 及其子路径返回 404；交易表单和筛选中的 tagIds 按未知字段返回 400，searchFields 中的 tag 也返回 400。升级后旧页面须重新加载以使用当前契约。
 
 ## 共享筛选
 
@@ -73,7 +82,7 @@ TransactionFilter 可被列表和三个统计接口复用；不同维度取交�
 
 ## 分页与统计
 
-POST /transactions/query：
+POST /api/transactions/query：
 
 ```json
 {"filter":{"dateFrom":"2026-09-01","dateTo":"2026-09-30","projectScope":"exclude"},"page":1,"pageSize":50,"sortBy":"time","sortDir":"desc","includeDayTotals":true}
@@ -85,9 +94,9 @@ dayTotals 是 date → {income,expense,count}，只含本页涉及日期，金�
 
 | 地址（均 POST） | 输入 | 返回 |
 | --- | --- | --- |
-| /statistics/summary | {filter,flowAccountId?} | income/expense/net、totalCount/incomeCount/expenseCount/transferCount、inflow/outflow、annual |
-| /statistics/categories | {filter,groupBy:"id"或"name",direction:"income"或"expense"} | 分类聚合数组，含 id/name/income/expense/incomeCount/expenseCount/latest |
-| /statistics/daily | {filter} | days、startWeekday、weekCount、total、activeDays |
+| /api/statistics/summary | {filter,flowAccountId?} | income/expense/net、totalCount/incomeCount/expenseCount/transferCount、inflow/outflow、annual |
+| /api/statistics/categories | {filter,groupBy:"id"或"name",direction:"income"或"expense"} | 分类聚合数组，含 id/name/income/expense/incomeCount/expenseCount/latest |
+| /api/statistics/daily | {filter} | days、startWeekday、weekCount、total、activeDays |
 
 summary 的金额不含转账；flowAccountId 指定时 inflow/outflow 包含该账户的转账。annual={amount,spanDays,count}，至少两笔支出且首末时间跨度四舍五入后大于 0 天才返回年化金额，否则 amount=null。
 
@@ -97,7 +106,7 @@ daily 必须提供 dateFrom/dateTo，最多 3661 天。days 补齐每日 {date,t
 
 ## 文本批量记账
 
-POST /transactions/batch/preview 只校验；POST /transactions/batch 再校验并整体提交。两者输入相同：
+POST /api/transactions/batch/preview 只校验；POST /api/transactions/batch 再校验并整体提交。两者输入相同：
 
 ```json
 {"rows":[{"line":1,"amountInput":"12.30","title":"午餐","note":"","accountId":"账户ID","categoryId":null,"date":"2026-09-15"}]}
