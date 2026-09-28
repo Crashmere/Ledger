@@ -1,6 +1,10 @@
 # Ledger 维护入口
 
-先读 [docs/README.md](docs/README.md)，按任务导航到架构、API、运维和 CI。以当前代码和文档为准，不依赖旧聊天或历史实现推断现状。
+本项目为个人使用：在本地验证本次改动即可发布，不设全量回归门槛，不默认新增或保留永久测试。界面改动检查实际使用的电脑/手机场景；数据迁移、批量写入/删除和备份恢复先用隔离副本针对性验证。
+
+GitHub 只备份源码和配置，推送不触发测试或部署。本机入口及回退见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)；共享流程由 server-operations 维护。
+
+先读 [docs/README.md](docs/README.md)，按任务导航到架构、API、运维和发布。以当前代码和文档为准，不依赖旧聊天或历史实现推断现状。
 
 ## 服务器上下文
 
@@ -14,22 +18,23 @@
 
 - 保持可读、直接、单人使用的设计。较重的统计/验证放后端；交易分页，API 面向通用筛选，不与具体页面名称绑定。避免无需求的 ORM/仓储套层/队列。
 - 用户确认的业务边界见 docs 入口；不要未经请求重新加入离线账本、GitHub 数据同步、SQL 控制台、网页备份恢复或设置页。
-- 用合成临时数据跑 `make test`；变更 Go 时加 `go vet ./...`，部署构建用 `make linux BASE_PATH=/ledger/`。UI 变动需实测窄屏（如 375×667）与桌面；生产只读验收，不插入测试账目。
+UI 变动需实测窄屏（如 375×667）与桌面；生产只读验收，不插入测试账目。
 - 数据库、备份和含真实账目的维护材料不能入 Git。缺库或写入结果不明时先调查，不创建空正式库、不自动重试写入。
-- 推送 main 会触发生产 CI/CD：代码改动只在用户要求部署时推送；纯文档提交加 `[skip ci]`，可直接推送。
 
 ## 文档是完成条件
 
-- 每次实现/维护后，主动核对并更新本项目 docs 和相关部署源文件；架构/API/交互/目录/配置/权限/备份/CI 变化都要有对应的最新说明。
+- 每次实现/维护后，主动核对并更新本项目 docs 和相关部署源文件；架构/API/交互/目录/配置/权限/备份/发布 变化都要有对应的最新说明。
 - 共享状态有变化时同时更新 agent-config 的服务器上下文与其他受影响项目，不只写 Ledger。
 - 覆盖过时信息、删除冗余旧方案，不在当前文档保留操作流水账；历史由 Git 保存。没有变化的文档不必机械修改日期。
-- 推送后运行 `~/agent-config/skills/server-operations/scripts/sync-docs.sh Ledger` 同步服务器 `/opt/ledger/docs` 和本入口（改了共享文档就不带参数，全部同步）；普通程序 CI 不同步文档。服务器副本不能独立演进，现场编辑必须回写仓库。
+- 推送后运行 `~/agent-config/skills/server-operations/scripts/sync-docs.sh Ledger` 同步服务器 `/opt/ledger/docs` 和本入口（改了共享文档就不带参数，全部同步）；本机程序发布 不同步文档。服务器副本不能独立演进，现场编辑必须回写仓库。
 
 ## 门户资源同步
 
 - 修改网站图标或认证时，同时核对 iPhone 的 apple-touch-icon、构建后路径及匿名 GET/HEAD；只允许明确的品牌图标/公开 manifest 例外，页面、API 和用户媒体仍须认证。统一排障与验收见 server-operations 的 common-issues；实际启用状态以 current-state 为准。
 
 - 本项目的 `deploy/portal.json` 是 ServerPortal 资源声明的维护源，记录目录用途、数据库、运行用户、端口、unit、访问路径、API 与备份类型。新增/迁移/删除数据根、接口或运行材料时，必须同步修改声明、对应 docs 与共享应用清单。
-- 声明部署在 `/opt/ledger/config/portal.json`，root 管理；CI 共用 server-operations 校验器，发布前预检，发布后通过受限 SSH 自动同步并核对门户加载哈希。`registry.d/ledger.json` 自动登记链接，更新无需重启门户。只修改门户信息时可手动运行 CI 的 `portal_only=true`，保留业务运行版本。
+- 声明部署在 `/opt/ledger/config/portal.json`，root 管理；本机发布共用 server-operations 校验器，发布前预检，发布后通过受限 SSH 自动同步并核对门户加载哈希。`registry.d/ledger.json` 自动登记链接，更新无需重启门户。
 - 统一认证由共享 Nginx 与门户负责，不在本项目另存设备白名单；本机调用和发布健康检查按共享约定保留。生产已启用设备认证；变更后同步 server-operations current-state。
 - 门户只读展示不替代本项目原生一致性备份；备份格式或媒体生命周期变化必须同时验证门户全量/增量与离线恢复。真实业务数据、凭据和备份仍不得进入 Git。
+
+本机发布自动预检和同步同提交的 `deploy/portal.json`；仅更新声明运行 `make portal`，保留业务程序版本。

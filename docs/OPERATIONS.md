@@ -33,7 +33,7 @@
   current-commit             当前程序对应的 Git 提交
   releases/                  每次自动发布的程序、上一版本及结果
   docs/                      当前项目文档和 SOURCE 来源标记
-  deploy-user/.ssh/           专用 CI 公钥与强制命令配置
+  deploy-user/.ssh/           本机专用发布公钥与强制命令配置
 ```
 
 | 对象 | 所有者与职责 |
@@ -42,7 +42,7 @@
 | data、backups | ledger:ledger，目录 0700；真实数据不得进 Git |
 | ledger.service | User/Group=ledger，`ExecStart=/opt/ledger/bin/ledger serve`，异常退出自动重启；systemd 只允许写 data |
 | ledger-backup.service | ledger 身份执行备份，可写 data/backups，执行结束退出 |
-| ledger-deploy | 专用发布身份，不是管理员交互 shell；权限见 CICD |
+| ledger-deploy | 专用发布身份，不是管理员交互 shell；权限见 DEPLOYMENT |
 
 实际 env（当前不含秘密）：
 
@@ -88,11 +88,9 @@ check 成功时无输出、退出码 0；不能因为没输出就当作没执行
 
 只适用于新的空应用目录。现有 Ledger 更新看后面的发布流程，不能重跑首次安装或拿其他快照覆盖正式数据。
 
-在有相应工具链的开发机或 CI，按 go.mod 与 web/package-lock.json 准备依赖并构建：
+在有相应工具链的开发机，按 go.mod 与 web/package-lock.json 准备依赖并构建：
 
 ```sh
-make test
-go vet ./...
 make linux BASE_PATH=/ledger/
 ```
 
@@ -125,7 +123,7 @@ curl --fail http://127.0.0.1/ledger/healthz
 curl --fail http://127.0.0.1/ledger/search
 ```
 
-检查资源前缀和公网访问，18080 不对公网开放；云侧权限按共享指南核实。然后设置 [CI/CD](CICD.md)，更新共享应用清单，运行 `sync-docs.sh Ledger` 同步文档。首次安装脚本不会自动配置 CI 或同步文档。
+检查资源前缀和公网访问，18080 不对公网开放；云侧权限按共享指南核实。然后设置 [本机发布](DEPLOYMENT.md)，更新共享应用清单，运行 `sync-docs.sh Ledger` 同步文档。首次安装脚本不会自动配置发布身份 或同步文档。
 
 ## 备份
 
@@ -169,9 +167,9 @@ Ledger 通过环境变量 LEDGER_FABRICWORLD_URL 调用 FabricWorld，未设置�
 
 首次启用先发布支持 /api/integrations/ledger 的 FabricWorld，再发布 Ledger。不改变 schema；复用现有 operations 表长期保留来源以避免重复。FabricWorld 不可用时只有同步失败，记账仍成功。若回退 FabricWorld，旧版每日清理会删除超过 7 天的联动操作记录，因此停止联动后才能长期运行旧版；普通健康失败的即时程序回退不会回滚数据。恢复 FabricWorld 到旧备份可能丢失之后的布料和同步来源，恢复前需协调核对。
 
-日常程序更新走 main → GitHub Actions，流程、权限、备份与自动回退见 [CICD.md](CICD.md)。写入生产之前通过合成测试。发布历史不自动清理。
+写入生产之前通过合成测试。发布历史不自动清理。
 
-GitHub 上传超时按 [CICD](CICD.md#查看状态和回退) 指向的共享备用发布处理。其他管理员紧急手工发布同样复用已安装的 `/opt/ledger/bin/deploy-release.sh`：对已验证产物提供完整源码 commit 与 SHA-256，从 stdin 输入二进制。该脚本已有锁、停服备份、候选校验、原子替换和健康回退；不要另写一套直接覆盖可执行文件的快捷命令。必须先读源码并确认权限、来源与参数，具体接口见 CICD。
+日常更新使用 [本机发布](DEPLOYMENT.md)。管理员也可把已核验程序经标准输入交给原固定发布脚本，保留备份、校验与失败回退。
 
 配置变更不会随二进制发布：
 
@@ -194,14 +192,14 @@ GitHub 上传超时按 [CICD](CICD.md#查看状态和回退) 指向的共享备�
 
 来源必须为完整的版本 1 数据库，目标必须不存在。工具用一致性快照复制，再在事务中删除两张标签表、更新 user_version，最后 VACUUM 并检查完整性和外键。失败时源库仍保留；目标可能不存在或留下待检查的副本，不用同一路径自动重试。restore 接受版本 1/2 并原样保留来源版本；新版 check 不接受旧备份，以避免发布把旧库误判为可运行。旧备份可用保留的旧程序检查，或通过 migrate 生成可供新版检查的副本。
 
-首次从版本 1 上线属于数据库与程序的协调切换，必须确认标签信息清除和 Ledger 短暂停服。历史备份不随升级清理。普通 CI 不执行升级，不能直接推送后期待自动成功；先准备经过测试的完整源码提交、Linux 产物及哈希，并在独立目录演练升级。
+首次从版本 1 上线属于数据库与程序的协调切换，必须确认标签信息清除和 Ledger 短暂停服。历史备份不随升级清理。普通本机发布 不执行升级，不能直接推送后期待自动成功；先准备经过测试的完整源码提交、Linux 产物及哈希，并在独立目录演练升级。
 
 管理员按实际唯一文件名准备切换命令，检查并持有与 deploy-release.sh 相同的 /run/lock/ledger-deploy.lock；阻止并发发布。维护期间不记账，操作范围仅 Ledger：
 
 1. 停止 ledger-backup.timer、ledger-backup.service 和 ledger.service。用当前旧程序以 ledger 身份生成 before-schema-upgrade 的一致性备份，保留旧程序和其 current-commit。
 2. 用候选程序以 ledger 身份从该备份生成新的版本 2 文件，并执行 check。核对账户、分类和交易全部字段，以及余额、收支统计；不向正式账本写入测试交易。任一步失败则保留现场并启动原服务与 timer，不切换。
 3. 将旧正式数据库和所有伴随 WAL/SHM 文件整体归档到新的私有目录。将已检查的版本 2 文件移到正式路径，保持 ledger:ledger/0600；不得让旧 WAL/SHM 与新库混用。通过独立的 bin/ledger.next 文件安装已核对哈希的候选程序，再原子重命名替换二进制。这里是受控 schema 切换，不通过普通发布脚本二次调用旧程序备份版本 2。
-4. 启动 Ledger，验证直连与代理健康、/ledger/search 和浏览器只读账目。成功后记录候选程序的源码提交到 current-commit，恢复备份 timer，使用新版备份工具生成首份版本 2 快照；同步本项目文档与 SOURCE。此后恢复普通 CI 发布。
+4. 启动 Ledger，验证直连与代理健康、/ledger/search 和浏览器只读账目。成功后记录候选程序的源码提交到 current-commit，恢复备份 timer，使用新版备份工具生成首份版本 2 快照；同步本项目文档与 SOURCE。此后恢复普通 本机发布。
 5. 若验收失败且尚未发生新写入，停止 Ledger，分别保留失败的版本 2 文件及其伴随文件，再恢复成对归档的旧库、旧程序和提交标记，启动原服务与 timer。已经发生新写入时先备份并确认恢复时点，不自动丢弃新账目。版本 1 程序不能直接运行版本 2 数据库。
 
 升级不会更改共享 Nginx、端口、权限方案或 FeeTable；共享服务器应用清单无需因本次 schema 调整而更新。
@@ -214,7 +212,7 @@ GitHub 上传超时按 [CICD](CICD.md#查看状态和回退) 指向的共享备�
 ~/agent-config/skills/server-operations/scripts/sync-docs.sh Ledger
 ```
 
-普通 CI 不同步文档；仅自动应用经校验的 portal.json，其他运行配置仍由管理员安装。纯文档提交用 `[skip ci]` 推送，避免触发发布；应用源码改动不能借此跳过应该执行的测试和部署。
+普通本机发布 不同步文档；仅自动应用经校验的 portal.json，其他运行配置仍由管理员安装。
 
 ## 排查
 
@@ -223,7 +221,7 @@ GitHub 上传超时按 [CICD](CICD.md#查看状态和回退) 指向的共享备�
 | 直连 18080 健康失败 | ledger unit/journal、env、路径/权限；不要创建空库 |
 | 直连成功，/ledger/ 失败 | Nginx location/link、语法、80、安全组；根 / 的 404 正常 |
 | 页面能打开但资源/API 失败 | 构建 BASE_PATH、Vue/API 前缀、代理去前缀、Host；测试深链接 |
-| 发布失败 | Actions 日志、releases/result、ledger journal；见 CICD 回退含义。exit 124 上传超时直接走共享备用发布（见 CICD） |
+| 发布失败 | 本机命令输出、last-deployment.json、releases/result 和服务 journal；见 DEPLOYMENT 的回退与排障。 |
 | 备份服务 inactive | 先查 Result/journal 与文件，oneshot 完成后本来就退出 |
 | 磁盘增长 | data/backups/releases；发布历史不自动轮换，不擅自删 WAL |
 | 写请求结果不明 | 先只读核对是否已保存，不自动重试写入 |
@@ -232,16 +230,22 @@ GitHub 上传超时按 [CICD](CICD.md#查看状态和回退) 指向的共享备�
 
 ## ServerPortal 接入材料
 
-`deploy/portal.json` 是本应用资源说明的维护源。CI 使用固定提交的 server-operations 校验器检查，再将同一声明与二进制一同保存为 artifact；发布前执行 `portal-check`，发布后执行 `portal`，通过现有受限 SSH 安装到 `/opt/ledger/config/portal.json` 并核对采集器实际加载的 SHA-256。`config/portal-source.json` 记录声明来源提交；它与程序的 current-commit 各自表示不同材料的版本。
+`deploy/portal.json` 是本应用资源说明的维护源。本机发布使用 server-operations 校验器检查，再将同一声明与二进制保存到同一本地版本目录；发布前执行 `portal-check`，发布后执行 `portal`，通过现有受限 SSH 安装到 `/opt/ledger/config/portal.json` 并核对采集器实际加载的 SHA-256。`config/portal-source.json` 记录声明来源提交；它与程序的 current-commit 各自表示不同材料的版本。
 
-门户从 `/opt/serverportal/registry.d/ledger.json` 的受控链接发现本应用，声明成功更新后自动加载，无需重启。首次正常 CI 发布也会建立链接，无需再编辑门户中央应用列表。普通发布可更新本应用的声明，其他 unit/env/Nginx/发布脚本仍由管理员安装。
+门户从 `/opt/serverportal/registry.d/ledger.json` 的受控链接发现本应用，声明成功更新后自动加载，无需重启。首次正常 本机发布也会建立链接，无需再编辑门户中央应用列表。普通发布可更新本应用的声明，其他 unit/env/Nginx/发布脚本仍由管理员安装。
 
-只改门户名称、目录用途、API 说明等元数据时，在 main 上手动运行 CI and deploy，设置 `portal_only=true`；仍执行验证与声明生效检查，但不替换程序、不停止业务服务、不创建发布前数据快照。源码或数据库行为变更不能使用该选项代替程序发布。
+源码或数据库行为变更不能使用该选项代替程序发布。
 
 数据根、媒体、备份格式、unit、端口或访问路径变化时，同一提交维护声明及对应文档，更新共享清单并核对资源覆盖。文件、媒体、数据库表和 systemd 状态由门户自动读取；目录用途、API 说明和权限边界须由维护 agent 明确更新。共同协议、失败处置与新应用接入见 [门户维护](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/portal.md)。
 
-门户 /portal/ 已统一保护公网访问，发布脚本通过回环检查应用健康，CI 公网检查预期未授权返回 401。设备授权永久有效至主动撤销，Cookie 经共享 Nginx 随有效请求续期；本应用若新增 add_header，必须保留共享 Set-Cookie 转发，规则及验收见共享门户维护文档。门户备份使用本应用原生一致性快照；真实完整链恢复验收按用户要求暂缓，不因本次维护自动继续下载或恢复。
+门户 /portal/ 已统一保护公网访问，发布脚本通过回环检查应用健康，本机发布公网检查预期未授权返回 401。设备授权永久有效至主动撤销，Cookie 经共享 Nginx 随有效请求续期；本应用若新增 add_header，必须保留共享 Set-Cookie 转发，规则及验收见共享门户维护文档。门户备份使用本应用原生一致性快照；真实完整链恢复验收按用户要求暂缓，不因本次维护自动继续下载或恢复。
 
 ## 手机桌面图标
 
 现有 apple-touch-icon.png 为 180×180；manifest.webmanifest 还声明 192/512 px 图标。Nginx 规则仅放行这几份公开文件的 GET/HEAD，保留原版本查询参数。页面、API 和用户媒体继续使用设备认证。共同原因、部署状态与手机验收见[共享排障记录](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/common-issues.md#统一认证后-iphone-桌面图标缺失)。
+
+## 当前发布入口
+
+本项目为个人使用：在本地验证本次改动即可发布，不设全量回归门槛，不默认新增或保留永久测试。界面改动检查实际使用的电脑/手机场景；数据迁移、批量写入/删除和备份恢复先用隔离副本针对性验证。
+
+完整流程见 [本机发布与回退](DEPLOYMENT.md)。GitHub 只保存源码；本机 `make release` 构建，`make deploy` 更新生产，文档单独同步。

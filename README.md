@@ -9,7 +9,6 @@
 需要 Go 1.26 和 Node 22.12+（或受 Vite 支持的更新版本）。依赖版本已锁定；Vue 类型检查工具目前配合 TypeScript 5.9。
 
 ```sh
-npm --prefix web ci
 go mod download
 go run ./cmd/ledger init --db var/dev.sqlite
 go run ./cmd/ledger serve --db var/dev.sqlite
@@ -28,7 +27,6 @@ npm --prefix web run dev
 ## 构建和测试
 
 ```sh
-make test
 make build
 ./bin/ledger serve --db var/dev.sqlite
 ```
@@ -37,11 +35,11 @@ make build
 
 部署到共享服务器的 `/ledger/` 路径时，使用 `make linux BASE_PATH=/ledger/`。它同时设置静态资源、Vue Router 和 API 前缀；Nginx 去掉此前缀后转发给 Go。默认构建和本地开发仍使用根路径。详见 [部署维护](docs/OPERATIONS.md)。
 
-仓库配置了 [自动检查与部署](docs/CICD.md)：PR 只验证，推送 main 验证成功后自动发布到服务器。每次发布先备份数据库，失败回退程序，不覆盖账本。
+仓库配置了 [自动检查与部署](docs/DEPLOYMENT.md)：PR 只验证，推送 main 验证成功后自动发布到服务器。每次发布先备份数据库，失败回退程序，不覆盖账本。
 
 测试使用临时合成账本，不读取个人财务数据。涵盖转账与删除、筛选、分页完整小计、历史时间、闰年、批量原子性、HTTP 表单、深链接、备份恢复，以及旧库升级后的逐字段保留和失败回滚。
 
-界面回归先执行 `make build BASE_PATH=/ledger/`，再运行 `node scripts/ui-e2e.mjs`。脚本使用相邻 FabricWorld checkout 的 Playwright 和本机 Chrome（可通过 `FABRICWORLD_CHECKOUT`、`PW_CHANNEL` 指定），在本机 19190–19191 启动独立临时账本，覆盖记账、筛选、账户分类管理、共享视图、面板返回、异常状态，以及 320/375/768/1440 px 布局。截图输出到忽略的 `var/ui-verification/`，结束后清理临时数据库。FabricWorld 联动回归见 [架构文档](docs/ARCHITECTURE.md#fabricworld-联动)。
+截图输出到忽略的 `var/ui-verification/`，结束后清理临时数据库。FabricWorld 联动回归见 [架构文档](docs/ARCHITECTURE.md#fabricworld-联动)。
 
 测试和维护报告若含真实账目信息，不纳入公开仓库。
 
@@ -75,4 +73,8 @@ make build
 2. `web/src/pages/Workspace.vue` → `components/FilterPanel.vue` → `internal/ledger/filters.go` → `transactions.go` / `statistics.go`。
 3. `model.go` 和 `schema.sql` 描述类型和持久字段；`ledger_test.go` 是业务规则的具体例子。
 
-日常维护以本 README、docs 和代码为准；变更后主动更新对应文档及服务器副本。共享主机约定由 [server-operations](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/SKILL.md) 统一维护。GitHub 用于源码与 CI/CD，不启用 GitHub Pages，也不用于账本同步。
+日常维护以本 README、docs 和代码为准；变更后主动更新对应文档及服务器副本。共享主机约定由 [server-operations](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/SKILL.md) 统一维护。GitHub 用于源码与 本机发布，不启用 GitHub Pages，也不用于账本同步。
+
+日常发布与验证按 [本机发布说明](docs/DEPLOYMENT.md) 执行；GitHub 只作源码备份。
+
+本地开发前运行 `npm --prefix web ci` 安装锁定依赖；正式发布的 `make release` 会在隔离快照中自动安装依赖并构建。

@@ -1,0 +1,12 @@
+{
+  "app": "ledger",
+  "build": [
+    "make",
+    "linux",
+    "BASE_PATH=/ledger/"
+  ],
+  "binary": "bin/ledger-linux-amd64",
+  "portal": true,
+  "restricted": true,
+  "gzip": false
+}
