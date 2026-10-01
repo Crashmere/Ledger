@@ -129,7 +129,7 @@ curl --fail http://127.0.0.1/ledger/search
 
 ## 备份
 
-`ledger-backup.timer` 每天北京时间 03:00，允许五分钟随机延迟，错过后补执行。脚本使用 `VACUUM INTO` 生成包含已提交 WAL 的一致性快照，完整性/外键检查通过后保留最近 14 份 `daily-*.sqlite`；发布前和手工备份不轮换。
+`ledger-backup.timer` 每天北京时间 03:00，允许五分钟随机延迟，错过后补执行。脚本使用 `VACUUM INTO` 生成包含已提交 WAL 的一致性快照，完整性/外键检查通过后保留最近 14 份 `daily-*.sqlite`；发布前备份按共享发布保留策略轮换，手工备份不自动清理。
 
 查看调度与结果：
 
@@ -169,7 +169,7 @@ Ledger 通过环境变量 LEDGER_FABRICWORLD_URL 调用 FabricWorld，未设置�
 
 首次启用先发布支持 /api/integrations/ledger 的 FabricWorld，再发布 Ledger。不改变 schema；复用现有 operations 表长期保留来源以避免重复。FabricWorld 不可用时只有同步失败，记账仍成功。若回退 FabricWorld，旧版每日清理会删除超过 7 天的联动操作记录，因此停止联动后才能长期运行旧版；普通健康失败的即时程序回退不会回滚数据。恢复 FabricWorld 到旧备份可能丢失之后的布料和同步来源，恢复前需协调核对。
 
-写入生产之前通过合成测试。发布历史不自动清理。
+写入生产之前通过合成测试。服务器发布历史按共享发布保留策略自动清理。
 
 日常更新使用 [本机发布](DEPLOYMENT.md)。管理员也可把已核验程序经标准输入交给原固定发布脚本，保留备份、校验与失败回退。
 
@@ -225,7 +225,7 @@ Ledger 通过环境变量 LEDGER_FABRICWORLD_URL 调用 FabricWorld，未设置�
 | 页面能打开但资源/API 失败 | 构建 BASE_PATH、Vue/API 前缀、代理去前缀、Host；测试深链接 |
 | 发布失败 | 本机命令输出、last-deployment.json、releases/result 和服务 journal；见 DEPLOYMENT 的回退与排障。 |
 | 备份服务 inactive | 先查 Result/journal 与文件，oneshot 完成后本来就退出 |
-| 磁盘增长 | data/backups/releases；发布历史不自动轮换，不擅自删 WAL |
+| 磁盘增长 | data/backups/releases；检查共享保留任务的保护/跳过原因，不擅自删 WAL |
 | 写请求结果不明 | 先只读核对是否已保存，不自动重试写入 |
 
 主机其他失败 unit、外部工具和共享问题以服务器清单和 common-issues 为入口，不在 Ledger 文档里另写处理方法。
@@ -251,3 +251,7 @@ Ledger 通过环境变量 LEDGER_FABRICWORLD_URL 调用 FabricWorld，未设置�
 本项目为个人使用：在本地验证本次改动即可发布，不设全量回归门槛，不默认新增或保留永久测试。界面改动检查实际使用的电脑/手机场景；数据迁移、批量写入/删除和备份恢复先用隔离副本针对性验证。
 
 完整流程见 [本机发布与回退](DEPLOYMENT.md)。GitHub 只保存源码；本机 `make release` 构建，`make deploy` 更新生产，文档单独同步。
+
+## 发布材料自动清理
+
+服务器每天北京时间 05:00 按[发布材料自动保留](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/retention.md)保留最近 3 次成功发布、最近 5 份完整发布前备份，并保护当前版本、对应备份和待核对失败批次。共享实现、锁、回执、预览及停用命令由 server-operations 维护；本项目 deploy 保留发布脚本的 recovery 标记和每日备份的 flock 入口。首次安装先按共享文档建立 /run/lock/ali-release-retention.lock，再启用 backup timer。daily、manual、业务数据、门户 exports 和维护电脑构建材料不在此自动清理范围。
