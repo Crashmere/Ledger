@@ -146,7 +146,7 @@ backup service 执行完显示 inactive 正常，失败看日志与 Result。备
 sudo systemctl start ledger-backup.service
 ```
 
-单独手工备份用 `ledger backup --db <正式路径> --out <不存在的唯一备份路径>`，以 ledger 身份运行；目标不能覆盖已有文件。自动备份保存在同盘；2026-09-27 已另取一份全应用数据归档下载到维护电脑并校验，见 [共享备份说明](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/current-state.md#手工数据归档)。当前没有自动异机同步。需要时仅传输已经完成的备份文件，不能上传到源码仓库或网页公开目录。
+单独手工备份用 `ledger backup --db <正式路径> --out <不存在的唯一备份路径>`，以 ledger 身份运行；目标不能覆盖已有文件。自动备份保存在同盘；2026-09-27 已另取一份全应用数据归档下载到维护电脑并校验，见 [共享备份说明](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/current-state.md#手工数据归档)。本应用脚本不主动异机同步；服务器另有阿里云文件备份，范围、30 天保留与恢复限制见[主机云备份](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/current-state.md#云备份)。需要时仅传输已经完成的备份文件，不能上传到源码仓库或网页公开目录。
 
 ## 恢复
 
