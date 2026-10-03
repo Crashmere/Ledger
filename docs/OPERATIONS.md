@@ -228,6 +228,14 @@ Ledger 通过环境变量 LEDGER_FABRICWORLD_URL 调用 FabricWorld，未设置�
 | 磁盘增长 | data/backups/releases；检查共享保留任务的保护/跳过原因，不擅自删 WAL |
 | 写请求结果不明 | 先只读核对是否已保存，不自动重试写入 |
 
+### 保存卡顿与结果不明
+
+先统一浏览器反馈、journal、Nginx 与数据库时间为北京时间，并适当扩大反馈时间窗口。保存接口是 `POST /ledger/api/transactions`（新增）、`PUT /ledger/api/transactions/{id}`（编辑）和 `POST /ledger/api/transactions/batch`（批量）；`POST /ledger/api/transactions/query` 与 `/statistics/*` 都是查询，返回 200 不能证明交易保存成功。Nginx access.log 的时间是请求结束时间，不能直接当作点击或请求开始时间。
+
+应用的普通请求耗时通过 `slog.Debug` 输出，默认 Info 级别下不进入 journal；journal 为空不表示没有请求。当前 Nginx 默认访问日志没有请求耗时或上游耗时，也没有浏览器侧错误记录，因此仅凭服务端日志不能还原每次页面等待的原因。499 表示客户端在响应完成前关闭请求，页面跳转、主动取消和网络中断都可能导致，不能单独据此认定服务器过载。主机历史采样可帮助判断资源压力，但不能排除采样间隔内的短时异常。
+
+核对落库结果应使用实际写入时间 `txn.created_at` / `updated_at`（epoch 毫秒），不要只查用户可选择的账目日期 `time`；包括软删除记录，必要时再按用户提供的金额或标题确认。可以用服务器已有 Python 标准库 `sqlite3`，以 ledger 身份通过 `file:/opt/ledger/data/ledger.sqlite?mode=ro` 和 `PRAGMA query_only=ON` 查询，避免输出无关账目或把生产结果写入仓库。前端请求超时为 30 秒；连接已被标为不可用时会在发出保存请求前拒绝写入。没有保存请求日志且没有对应写入时，应继续结合当时的页面提示与客户端网络证据定位，不自动补交交易。
+
 主机其他失败 unit、外部工具和共享问题以服务器清单和 common-issues 为入口，不在 Ledger 文档里另写处理方法。
 
 ## ServerPortal 接入材料
