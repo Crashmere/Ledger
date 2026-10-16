@@ -1,39 +1,39 @@
-# 本机发布与回退
+# Local Release and Rollback
 
-本项目为个人使用：在本地验证本次改动即可发布，不设全量回归门槛，不默认新增或保留永久测试。界面改动检查实际使用的电脑/手机场景；数据迁移、批量写入/删除和备份恢复先用隔离副本针对性验证。
+This project is for personal use: a change may be released after validating the functionality changed in this task locally. There is no full-regression gate, and permanent tests are not added or retained by default. For UI changes, check the computer and phone scenarios actually used. Validate data migrations, bulk writes/deletions, and backup restoration specifically on an isolated copy first.
 
-GitHub 仅作源码和配置备份，Actions 已关闭。提交、推送不会更新生产。共享实现和环境准备见 [server-operations 本机发布](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/release.md)；本项目参数来自 `deploy/release.json`。
+GitHub is used only to back up source code and configuration, and Actions is disabled. Committing and pushing do not update production. See [server-operations Local Deployment](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/release.md) for the shared implementation and environment setup. This project's parameters come from `deploy/release.json`.
 
-## 日常使用
+## Routine Use
 
 ```sh
-# 在本地走通本次功能，再提交并推送源码。
-git add <本次修改的文件>
-git commit -m "描述改动"
+# Validate the changed functionality locally, then commit and push the source.
+git add <files-changed-in-this-task>
+git commit -m "describe the change"
 git push origin main
-make release   # 从已提交快照构建；不运行全量测试
-make deploy    # 复用同提交产物，经 SSH 发布
+make release   # Build from the committed snapshot; do not run the full test suite.
+make deploy    # Reuse artifacts from the same commit and release over SSH.
 ```
 
-本地材料位于 `.local/releases/<完整提交>/`，包含 program、manifest.json 和同提交 portal.json。部署会校验哈希并确认提交已备份到 origin/main；源码未变时复用产物。未跟踪文件不进入构建。`make releases` 列出本地版本；这些材料不提交 Git。
+Local materials are stored under `.local/releases/<full-commit>/` and include `program`, `manifest.json`, and the `portal.json` from the same commit. Deployment verifies hashes and confirms that the commit has been backed up to `origin/main`; it reuses artifacts when source code is unchanged. Untracked files are not included in the build. `make releases` lists local versions. These materials are not committed to Git.
 
-仅更新门户信息用 `make portal`；它预检并同步同提交声明，不构建/重启业务程序。声明同步失败不会自动撤回已成功更新的程序，修复后单独重试。
+Use `make portal` to update only portal information. It preflights and synchronizes the declaration from the same commit without building or restarting the business program. A failed declaration synchronization does not automatically roll back a program update that already succeeded; fix the problem and retry the declaration separately.
 
-## 发布边界
+## Release Boundaries
 
-使用 ledger-deploy 受限身份，私钥仅在维护电脑。首次建立账号用 `deploy/setup-deploy.sh <本机发布公钥>`；已有账号不要重复初始化。强制命令只接受 deploy、portal-check、portal，sudo 只允许该应用固定发布脚本。
+Release uses the restricted `ledger-deploy` identity, whose private key exists only on the maintenance computer. To establish the account for the first time, run `deploy/setup-deploy.sh <local-release-public-key>`; do not initialize an existing account again. The forced command accepts only `deploy`, `portal-check`, and `portal`, and sudo permits only this application's fixed release script.
 
-上传完成且校验通过后才进入切换。保留升级前备份和 previous，健康失败恢复旧程序；正常发布不携带生产数据。unit、Nginx、env、授权及发布脚本由管理员按源码显式同步，文档使用共享 sync-docs.sh。
+The switch begins only after upload and verification succeed. Preserve the pre-upgrade backup and `previous`, and restore the old program if the health check fails. Normal releases do not carry production data. An administrator explicitly synchronizes units, Nginx, env, authorization, and release scripts from source; documentation uses the shared `sync-docs.sh`.
 
-当前数据库为 schema 2；旧 schema 1 程序不能只换二进制回退。数据库升级/恢复仍按 OPERATIONS 独立处理。
+The current database is schema 2. A schema 1 program cannot be rolled back by replacing only the binary. Handle database upgrades and restoration separately according to `OPERATIONS`.
 
-## 回退与排障
+## Rollback and Troubleshooting
 
 ```sh
 make releases
-make rollback COMMIT=<明确选择的完整旧提交>
+make rollback COMMIT=<explicitly-selected-full-old-commit>
 ```
 
-回退复用本机保留的已校验产物，仍经过备份与健康检查；先确认旧程序兼容当前数据。程序回退不恢复数据库、照片或设备状态。需要恢复数据时先选择恢复时点并保留现状，按 OPERATIONS/RESTORE 执行。
+Rollback reuses verified artifacts retained locally and still performs backup and health checks. First confirm that the old program is compatible with current data. Program rollback does not restore the database, photos, or device state. To restore data, first choose the recovery point and preserve the current state, then follow the restoration procedure in `OPERATIONS`.
 
-服务器在 `/opt/ledger/releases/` 保留程序、previous、metadata、result、recovery，`current-commit` 记录实际运行来源。`.local/releases/<commit>/last-deployment.json` 记录本机发布结果。上传失败通常尚未停服务；已切换后失败先看 result 和 journal。服务器发布历史与普通发布前快照按[发布材料自动保留](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/retention.md)自动轮换；本地构建、manual、迁移和门户导出包不参与。
+The server retains `program`, `previous`, `metadata`, `result`, and `recovery` under `/opt/ledger/releases/`; `current-commit` records the source of the version actually running. `.local/releases/<commit>/last-deployment.json` records the local deployment result. An upload failure normally occurs before the service is stopped. For a failure after switching, inspect `result` and the journal first. Server release history and ordinary pre-release snapshots rotate automatically according to [Automatic Retention of Release Materials](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/retention.md). Local builds, `manual` and migration materials, and portal export packages are excluded.

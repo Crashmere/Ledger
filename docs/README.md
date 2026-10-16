@@ -1,56 +1,56 @@
-# Ledger 文档入口
+# Ledger Documentation Entry Point
 
-这里描述当前实现与维护方式，不保存聊天纪要或历次迁移方案。先选对应主题，再读具体代码；修改后覆盖旧说明，历史在 Git 中查。
+This directory describes the current implementation and maintenance approach. It does not retain chat summaries or historical migration plans. Choose the relevant topic first, then read the corresponding code. Replace outdated explanations after changes; use Git for history.
 
-源码仓库为 [Crashmere/Ledger](https://github.com/Crashmere/Ledger)，本地仓库目录使用 `Ledger`。服务器沿用小写命名：`/opt/ledger`、`/ledger/` 和 `ledger.service`，与其他应用的运行约定一致。
+The source repository is [Crashmere/Ledger](https://github.com/Crashmere/Ledger), and local repository directories use `Ledger`. The server uses lowercase names—`/opt/ledger`, `/ledger/`, and `ledger.service`—consistent with the runtime conventions for other applications.
 
-## 阅读导航
+## Reading Guide
 
-| 想了解什么 | 文档 |
+| What you want to understand | Document |
 | --- | --- |
-| 请求、保存、筛选统计如何运行，代码从哪里读 | [ARCHITECTURE.md](ARCHITECTURE.md) |
-| API 字段、通用筛选、分页和统计契约 | [API.md](API.md) |
-| 当前部署、查看命令、首次安装、备份恢复、排障 | [OPERATIONS.md](OPERATIONS.md) |
+| How requests, saves, filtering, and statistics work, and where to start reading the code | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| API fields, general filters, pagination, and statistics contracts | [API.md](API.md) |
+| Current deployment, inspection commands, first-time installation, backup and restoration, and troubleshooting | [OPERATIONS.md](OPERATIONS.md) |
 
-源码仓库的 README 提供本地开发和构建入口；服务器维护材料以本目录为入口。全局服务器约定不复制在此，见 [server-operations](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/SKILL.md)，服务器副本位于 `/opt/server-context/`，先读 `/opt/AGENTS.md`。
+The source repository's README provides local-development and build entry points; use this directory as the entry point for server maintenance materials. Global server conventions are not copied here. See [server-operations](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/SKILL.md); its server copy is under `/opt/server-context/`, and `/opt/AGENTS.md` must be read first.
 
-## 已确认的产品与实现边界
+## Confirmed Product and Implementation Boundaries
 
-- 单人账本，经统一设备认证，联网才能查看和记账；授权设备可以查看和修改。当前使用公网 HTTPS、`/ledger/` 子路径；这不是对其他应用的默认访问授权。
-- 服务器保存唯一正式数据。前端 Vue，后端 Go + SQLite；较重的统计/计算与业务校验在后端，前端保留显示与轻量计算。
-- 交易分页，筛选和统计 API 面向通用条件，工作台明细与洞察共用。保持直接可读的代码，不为假想并发扩展复杂层次。
-- 明细底部分页显示总条数、前后翻页、可直接跳转的页码和每页条数选择；默认 10 条，可选 20/50/100 条。页码较多时以省略号收起，手机将页码放在独立一行。切换每页条数回到第一页，保留当前筛选与排序。
-- 无标签功能；交易按账户、分类、类型、金额、日期和关键词组织与筛选。
-- 删除用 `is_delete`，网页无回收站。金额整数分，账目日期按北京时间，底层时间保留 epoch 毫秒。
-- 没有浏览器账本、GitHub 数据同步、离线写队列或 Service Worker。浏览器只保存显示偏好、近期搜索等非账本状态。
-- 网页无 SQL 控制台、导出、恢复或迁移入口，无独立设置页；相关轻量选项回到对应页面。备份恢复只由服务器维护工具处理。
-- 服务器数据库是唯一正式账本，重建使用 Ledger 一致性备份或明确创建空库；不从其他快照覆盖现账本。GitHub 仅用于源码和 本机发布，Pages 未启用。
-- 手机使用原生金额输入，电脑保留计算器；manifest 仅用于桌面入口，不代表支持离线。iOS 安装行为有平台限制，不承诺强制隐藏浏览器工具栏。
-- 网站、浏览器标签和桌面入口统一使用墨绿底的 L 形账页标识，暖白主体搭配浅金色账目短线。SVG 与各尺寸 PNG 由同一图形生成；iOS 和可裁切桌面图标使用满底色，适配系统外形。
-- 统一账本工作台：账户是数据范围，明细与洞察是共享搜索、日期和筛选的两种视图；管理账户/分类与单笔/批量录入使用嵌套路由面板。关闭面板后在后台刷新余额和交易，保留当前内容、范围与滚动位置，不显示骨架屏。旧概览、搜索、账户、报告和录入链接重定向到对应工作台视图或面板。
-- 支持月、近 30 天、本年、全部时间和自定义日期，类型/多账户/分类/金额筛选、关键词搜索范围（标题/备注/分类/金额，默认全选；金额按输入的元精确匹配）、最近搜索、金额/时间排序、临时排除、编辑、复制与完整日小计。洞察显示收支趋势、分类占比与排名、年化和每日支出热力图；点分类回到同范围明细。未分类只展示统计。
-- 时间范围使用自定义浮动菜单，按钮箭头与右边缘保持留白；展开时箭头旋转、菜单轻微缩放淡入，选中后显示勾选和标签过渡。菜单不推移页面，靠近屏幕边缘时自动避让，空间不足可滚动。上下键浏览、Home/End 跳到首尾、回车或空格确认，Esc/Tab 关闭；菜单打开时不触发背景月份或视图快捷键。点击外部、页面滚动或路由变化时关闭，减少动态效果时立即切换。
-- 筛选按钮右侧常驻回转箭头重置按钮，面板收起时也能清空账户、类型、分类和金额条件；与面板内“清空筛选”行为一致，同时清除未应用的金额输入和校验提示。重置保留日期范围、关键词、搜索范围、临时排除、排序和当前视图，不改变面板开合状态。手机上两个按钮并排，搜索框独占下一行。
-- 筛选顶部的默认提示与选中条件标签共用稳定的单行占位，选择首个条件、移除最后一个条件或清空时不会因标签高度不同推移筛选框；多个条件或长名称仍按可用宽度自然换行。
-- 洞察趋势按范围自动汇总：不超过 62 天按日、不超过 730 天按月，更长按年，并可查看每个区间的金额。每日支出按月排列为日历块，跨年范围可选择热力图年份（默认最近一年）；切换年份只影响日历，统计与颜色尺度仍覆盖完整筛选。当前只显示一个月份时，整月或月内短范围都使用放大的单列日历；多个可见月份保持紧凑排列。内容按实际可用宽度排列，全年也不会横向撑开页面。
-- 洞察左下角的支出/收入切换复用已有统计，只在分类区域显示轻量过渡和进度提示，不重新请求数据或显示整页骨架屏。两种分类内容共用稳定高度，走势图、每日支出日历与滚动位置保持不变；快速切换以最后选择为准，减少动态效果时立即切换。
-- 每日支出日历中，今天的日期格使用金色边框、光点和轻微呼吸动效，并显示“今天”图例；只有当前可见日期包含今天时才出现。按北京时间判断，跨午夜或返回页面时自动更新；减少动态效果时保留静态标记，原有支出颜色不变。
-- 点击“每日支出”的日期格或“收支走势”的时间块，在点击位置旁显示该区间的收支浮窗，保留当前筛选，收入和支出按金额从大到小混排，每笔只显示标题和带正负号的数额。浮窗可滚动并加载更多，单独显示读取、空结果和重试状态；点击外部、Escape、页面滚动或范围切换时关闭，不移动主页面。手机根据触摸位置自动避开屏幕边缘。
-- 桌面左侧为账户范围，顶部为操作栏；手机顶栏右侧并排显示带浅色边框的账本选择框和三横线菜单，账户管理位于菜单内。手机通过浮动“记一笔”进入录入，批量记账从录入面板内切换，顶栏不再单独显示批量入口。录入与管理使用桌面侧面板、手机全屏面板。账户和分类保留拖动排序，并增加可用键盘和触屏的上下移动按钮。
-- 界面使用暖白底色和墨绿主色，余额、收支汇总、交易内容分层呈现。手机并排展示收支，净额独占紧凑一行；分类保持各自保存的颜色，收入/支出/转账保持明确的金额语义色。面板、筛选、视图与弹窗有轻量过渡，系统开启“减少动态效果”时关闭动画；控件不显示焦点高亮。
-- 主页面 Tab / Shift+Tab 只切换明细与洞察，不逐个聚焦控件；左右方向键只在按月范围内切换月份，输入框内保留光标操作。走势图与每日支出日历通过悬停或点击查看金额，不用方向键移动选中项。单笔新建、复制和编辑交易时，Tab 按金额 → 标题 → 备注循环，Shift+Tab 反向循环；桌面和手机外接键盘一致。记一笔（新建和复制）加载完成后直接聚焦金额，可立即输入。录入和管理面板按一次 Esc 关闭；输入法组词时按 Esc 只取消组词，不关闭面板。弹窗、保存等待、账户管理和批量录入保持各自的焦点约束，不触发背景页面快捷键。
-- 新建和编辑交易的标题与备注相邻，备注紧接标题下方，再显示账户、分类（转账为转入账户）和日期。
-- 手机新建和编辑交易的日期独占一行，直接使用系统日期选择器，前后一天按钮与日期输入组成一组。
-- 手机和电脑切换视图或打开面板立即显示对应标题；页面代码、初始数据未就绪时显示骨架屏，读取失败显示错误和重试入口。
-- 切换明细页码、每页条数、明细/洞察或月份时保持主内容区的滚动位置；加载期间保留原结果高度，避免骨架屏变短导致跳到顶部。等待时仍可自由滚动；若新结果或最后一页较短，只按实际内容高度停在可滚动边界，不保留空白占位。
-- 切到其他标签页或窗口再返回时，在后台更新账目，保留当前内容、页码、筛选与滚动位置，不显示整页骨架屏。重复返回事件合并处理，数据未变化时保留图表状态；更新失败提示并可重试，不清空已有结果。录入面板和详情打开时不刷新背景，网络断开仍显示连接提示并禁止写入。
-- 新增、编辑和批量记账都等待服务器确认；保存期间显示模态加载界面、阻止站内离开和重复点击，成功后才清空或返回。失败保留表单，结果不明时先核对账目，当前表单不重复提交。
-- 新建“副业”账户下“纺织”分类的支出，交易保存后询问是否同步到 FabricWorld；失败可手动重试，成功可直接跳到新布料编辑页。取消或同步失败不撤销交易。已有目标交易在账本详情弹窗和交易编辑页提供“同步至 FabricWorld”按钮，点击后复用同一确认流程；编辑页有未保存修改时先保存再同步。保存旧交易不会自动触发；复制后保存属于新建。批量记账按目标交易逐笔询问，选择跳转会结束本页余下询问。
+- This is a single-person ledger protected by shared device authentication; viewing and entry require a network connection. Authorized devices may view and modify data. The current public entry point uses HTTPS under `/ledger/`; this does not grant default access to other applications.
+- The server stores the only authoritative data. The frontend is Vue and the backend is Go + SQLite. Heavier statistics/calculation and business validation belong in the backend; the frontend handles display and lightweight calculations.
+- Transactions are paginated. Filter and statistics APIs accept general conditions and are shared by the workbench's “明细” and “洞察” views. Keep the code direct and readable; do not add complex layers for hypothetical concurrency.
+- Pagination at the bottom of “明细” shows the total count, previous/next controls, directly selectable page numbers, and a page-size selector. The default is 10 entries, with 20/50/100 available. Many page numbers collapse behind ellipses; on phones, page numbers occupy a separate row. Changing page size returns to the first page while preserving current filters and sorting.
+- There is no tag feature. Transactions are organized and filtered by account, category, type, amount, date, and keyword.
+- Deletion uses `is_delete`; the web UI has no recycle bin. Amounts are integer cents, ledger dates use Beijing time, and underlying timestamps retain epoch milliseconds.
+- There is no browser ledger, GitHub data synchronization, offline write queue, or Service Worker. The browser stores only non-ledger state such as display preferences and recent searches.
+- The web UI has no SQL console, export, restoration, migration entry point, or separate settings page. Relevant lightweight options live on their corresponding pages. Only server maintenance tools handle backup restoration.
+- The server database is the only authoritative ledger. Rebuilding uses a consistent Ledger backup or an explicitly created empty database; do not overwrite the current ledger with another snapshot. GitHub is used only for source code and local release; Pages is disabled.
+- Phones use native amount input, while computers retain the calculator. The manifest provides a home-screen entry point but does not imply offline support. iOS installation behavior has platform limits; the application does not promise to force browser chrome to remain hidden.
+- The website, browser tab, and home-screen entry all use a dark-green L-shaped ledger-page mark, with a warm-white body and short pale-gold ledger lines. SVG and all PNG sizes are generated from the same graphic. iOS and crop-capable desktop icons use a full background so the system can apply its own shape.
+- The unified ledger workbench treats accounts as the data scope, with “明细” and “洞察” as two views sharing search, dates, and filters. Account/category management and single/batch entry use nested route panels. Closing a panel refreshes balances and transactions in the background while retaining current content, scope, and scroll position, with no skeleton screen. Old overview, search, account, report, and entry links redirect to the corresponding workbench view or panel.
+- Supported time ranges are “月”, “近 30 天”, “本年”, “全部时间”, and a custom date range. Filters cover type, multiple accounts, category, amount, and keyword search scope (title/note/category/amount; all selected by default; amount requires an exact match to the entered yuan), plus recent searches, amount/time sorting, temporary exclusion, editing, copying, and full-day subtotals. “洞察” shows income/expense trends, category proportions and rankings, annualized spending, and a daily-expense heatmap. Selecting a category returns to “明细” with the same scope. Uncategorized entries are shown only in statistics.
+- The time range uses a custom floating menu. The button leaves space between its arrow and right edge; the arrow rotates on open, the menu fades in with slight scaling, and selection shows a checkmark and label transition. The menu does not shift the page, avoids screen edges automatically, and scrolls when space is insufficient. Up/Down browse, Home/End jump to the first/last item, Enter or Space confirms, and Esc/Tab closes. Background month and view shortcuts are suspended while the menu is open. Outside clicks, page scrolling, and route changes close it; reduced-motion mode switches immediately.
+- A persistent curved-arrow reset button sits to the right of the filter button and clears account, type, category, and amount conditions even when the panel is collapsed. It behaves like “清空筛选” inside the panel and also clears unapplied amount input and validation messages. Reset preserves the date range, keyword, search scope, temporary exclusions, sorting, current view, and the panel's expanded/collapsed state. On phones the two buttons are side by side, with the search field on the next row by itself.
+- The filter header's default prompt and selected-condition tags share a stable single-line placeholder. Selecting the first condition, removing the final condition, or clearing filters does not move the filter fields because tag height changed. Multiple conditions and long names still wrap naturally within available width.
+- “洞察” aggregates trends according to range: by day for at most 62 days, by month for at most 730 days, and by year for longer ranges; each interval exposes its amount. Daily expenses are arranged into monthly calendar blocks. Cross-year ranges allow selecting a heatmap year (the latest year by default); changing the year affects only the calendar, while statistics and the color scale still cover the complete filter. When only one month is visible, both a whole month and a shorter within-month range use an enlarged single-column calendar. Multiple visible months remain compact. Content follows the width actually available, so even a full year does not stretch the page horizontally.
+- The “支出/收入” switch at the lower left of “洞察” reuses statistics already loaded. Only the category area shows a lightweight transition and progress indicator; it does not request data again or display a page-wide skeleton. Both category variants share a stable height, preserving the trend chart, daily-expense calendar, and scroll position. The last choice wins during rapid switching; reduced-motion mode switches immediately.
+- In the daily-expense calendar, today's cell uses a gold border, a light point, and a subtle breathing effect, with a “今天” legend. These appear only when today is among the currently visible dates. The date uses Beijing time and updates automatically across midnight or when returning to the page. Reduced-motion mode retains a static marker, and the original expense colors do not change.
+- Selecting a date cell in “每日支出” or a time block in “收支走势” opens an income/expense popover beside the selected point. It retains current filters and intermixes income and expenses in descending amount order; each entry shows only the title and a signed amount. The popover scrolls and loads more, with separate loading, empty, and retry states. It closes on an outside click, Escape, page scroll, or range change without moving the main page. On phones it avoids screen edges according to the touch position.
+- On desktop, the account scope is on the left and the action bar is at the top. On phones, a lightly bordered ledger selector and a three-line menu sit side by side on the right of the top bar; “账户管理” is inside the menu. Phones enter through the floating “记一笔” button, and batch entry is selected from within the entry panel rather than from a separate top-bar action. Entry and management use a desktop side panel and a phone full-screen panel. Accounts and categories retain drag sorting and also provide keyboard- and touch-usable move-up/move-down buttons.
+- The interface uses a warm-white background and dark-green primary color, with layered presentation for balances, income/expense summaries, and transaction content. Phones show income and expenses side by side, with net amount on a separate compact row. Categories retain their saved colors, while income, expenses, and transfers use distinct semantic amount colors. Panels, filters, views, and popovers use lightweight transitions; animations are disabled when the system requests reduced motion. Controls do not show focus highlights.
+- On the main page, Tab / Shift+Tab switch only between “明细” and “洞察” rather than focusing every control. Left/Right change months only in the monthly range; text inputs retain cursor movement. Trend charts and daily-expense calendars expose amounts through hover or click rather than arrow-key selection. When creating, copying, or editing a single transaction, Tab cycles amount → title → note and Shift+Tab cycles in reverse, consistently on desktop and with an external phone keyboard. After “记一笔” for a new or copied transaction finishes loading, amount receives focus for immediate entry. One Esc closes an entry or management panel; during IME composition, Esc cancels composition only and does not close the panel. Dialogs, save waits, account management, and batch entry keep their own focus constraints and do not trigger background-page shortcuts.
+- For new and edited transactions, title and note are adjacent, with note immediately below title, followed by account, category (destination account for transfers), and date.
+- On phones, the date for new and edited transactions occupies its own row and uses the system date picker directly; previous-day and next-day buttons form one group with the date input.
+- Switching views or opening a panel shows the corresponding title immediately on phones and computers. A skeleton is shown while page code or initial data is not ready; read failures show an error and retry entry point.
+- Switching “明细” pages or page sizes, toggling “明细”/“洞察”, or changing month preserves the main content area's scroll position. During loading, the old result height is retained so a shorter skeleton does not jump to the top. The user may still scroll freely while waiting. If new results or the last page are shorter, the page stops at the actual scroll boundary rather than keeping blank placeholder space.
+- Returning after switching to another tab or window refreshes ledger entries in the background while preserving current content, page, filters, and scroll position, with no page-wide skeleton. Repeated return events are coalesced. When data is unchanged, chart state is preserved. Refresh failure displays a retryable message without clearing existing results. Background refresh is skipped while an entry panel or detail view is open. A disconnected network keeps the connection warning visible and disables writes.
+- New, edited, and batch transactions all wait for server confirmation. While saving, a modal loading screen blocks in-app navigation and duplicate clicks. The form is cleared or closed only after success. Failure preserves the form; when the outcome is unknown, verify the ledger first and do not resubmit the current form.
+- After creating an expense in category “纺织” under account “副业”, the application asks whether to synchronize it to FabricWorld. A failed synchronization can be retried manually; success can open the new fabric's edit page directly. Canceling or a failed synchronization does not undo the transaction. Existing eligible transactions expose a “同步至 FabricWorld” button in both the ledger detail dialog and transaction edit page, reusing the same confirmation flow. If the edit page has unsaved changes, save them before synchronizing. Saving an old transaction does not trigger synchronization automatically; saving a copy counts as a new transaction. Batch entry asks once per eligible transaction, and choosing to navigate ends the remaining prompts on that page.
 
-## 维护与改进
+## Maintenance and Improvement
 
-这些是当前约定，不是禁止改进。新需求可调整架构，但应说明收益、数据/发布影响和迁移方式；影响其他应用时按共享技能评估全部项目。哪些事需要先征得用户确认，只看 server-operations SKILL.md 的授权表。
+These are current conventions, not a ban on improvement. New requirements may change the architecture, but document the benefit, data/release impact, and migration path. If other applications are affected, use the shared skill to assess every project. Use only the authorization table in `server-operations` `SKILL.md` to decide which actions require advance confirmation.
 
-维护结束前核对：实现与测试、对应 docs、部署源文件、共享清单（若受影响）、Git 同步、服务器文档副本。文档与运行程序分别版本化；`/opt/ledger/docs/SOURCE` 说明文档来源，`/opt/ledger/current-commit` 说明程序来源，二者允许不同但不能混淆。
+Before completing maintenance, check implementation and tests, corresponding docs, deployment source files, the shared inventory when affected, Git synchronization, and the server documentation copies. Documentation and the running program are versioned separately: `/opt/ledger/docs/SOURCE` identifies the documentation source, while `/opt/ledger/current-commit` identifies the program source. They may differ but must not be confused.
 
-日常发布与验证按 [本机发布说明](DEPLOYMENT.md) 执行；GitHub 只作源码备份。
+Follow the [local release guide](DEPLOYMENT.md) for routine release and validation. GitHub is only a source-code backup.

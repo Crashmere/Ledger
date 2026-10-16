@@ -1,43 +1,44 @@
-# Ledger 维护入口
+# Ledger Maintenance Entry Point
 
-本项目为个人使用：在本地验证本次改动即可发布，不设全量回归门槛，不默认新增或保留永久测试。界面改动检查实际使用的电脑/手机场景；数据迁移、批量写入/删除和备份恢复先用隔离副本针对性验证。
+This project is for personal use: a change may be released after validating the functionality changed in this task locally. There is no full-regression gate, and permanent tests are not added or retained by default. For UI changes, check the computer and phone scenarios actually used. Validate data migrations, bulk writes/deletions, and backup restoration specifically on an isolated copy first.
 
-GitHub 只备份源码和配置，推送不触发测试或部署。本机入口及回退见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)；共享流程由 server-operations 维护。
+GitHub backs up only source code and configuration; pushing does not trigger tests or deployment. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for local entry points and rollback. Shared workflows are maintained by `server-operations`.
 
-先读 [docs/README.md](docs/README.md)，按任务导航到架构、API、运维和发布。以当前代码和文档为准，不依赖旧聊天或历史实现推断现状。
+Read [docs/README.md](docs/README.md) first, then use it to navigate to architecture, API, operations, and release documentation for the task. Treat current code and documentation as authoritative; do not infer the current state from old conversations or historical implementations.
 
-## 服务器上下文
+## Server Context
 
-- 对部署、服务器排查、新应用共存或共享架构改动，先使用 `server-operations` 技能。源为 `Crashmere/agent-config/skills/server-operations/SKILL.md`，本地通常在 `~/agent-config`。
-- 即使客户端未加载该技能，也要显式读取 `ssh ali 'cat /opt/AGENTS.md'`，再按导航读取共享文档；SSH 不会自动加载远端 AGENTS。
-- 可能影响其他应用的共性问题（主机、网络、共享发布/备份模式等），解决方案写入 agent-config 的 `references/common-issues.md` 并覆盖全部受影响应用，本项目只留参数和链接。
-- 共享入口/主机约定归 agent-config；本项目只维护 Ledger 的程序、location、unit、数据与发布。跨项目变更必须评估共享应用清单中的所有应用。
-- 哪些事直接做完再告知、哪些先确认，只看 server-operations SKILL.md 的授权表。文档维护与同步、清理已知垃圾、按 common-issues 已有方案处理问题都不需要事先确认。
+- Before deployment, server troubleshooting, coexistence with a new application, or shared-architecture changes, use the `server-operations` skill. Its source is `Crashmere/agent-config/skills/server-operations/SKILL.md`, usually available locally under `~/agent-config`.
+- Even if the client has not loaded that skill, explicitly read `ssh ali 'cat /opt/AGENTS.md'`, then follow its navigation to the shared documentation. SSH does not load remote AGENTS automatically.
+- When a common issue may affect other applications (the host, network, shared release/backup patterns, and so on), document the solution in agent-config's `references/common-issues.md` for every affected application. Keep only project-specific parameters and links here.
+- Shared entry points and host conventions belong to agent-config. This project maintains only Ledger's program, location, unit, data, and release materials. Cross-project changes must assess every application in the shared inventory.
+- Use only the authorization table in `server-operations` `SKILL.md` to decide what to complete and report afterward versus what to confirm first. Documentation maintenance and synchronization, cleanup of known junk, and applying an existing `common-issues` solution do not require advance confirmation.
 
-## 实现与验证
+## Implementation and Validation
 
-- 保持可读、直接、单人使用的设计。较重的统计/验证放后端；交易分页，API 面向通用筛选，不与具体页面名称绑定。避免无需求的 ORM/仓储套层/队列。
-- 用户确认的业务边界见 docs 入口；不要未经请求重新加入离线账本、GitHub 数据同步、SQL 控制台、网页备份恢复或设置页。
-- UI 变动需实测窄屏（如 375×667）与桌面；生产只读验收，不插入测试账目。
-- 数据库、备份和含真实账目的维护材料不能入 Git。缺库或写入结果不明时先调查，不创建空正式库、不自动重试写入。
+- Keep the design readable, direct, and suitable for one person. Put heavier statistics and validation in the backend. Paginate transactions, and make APIs support general filters rather than bind them to particular page names. Avoid unneeded ORM/repository layers or queues.
+- User-confirmed product boundaries are listed in the docs entry point. Do not reintroduce an offline ledger, GitHub data synchronization, a SQL console, browser-based backup restoration, or a settings page unless requested.
+- UI changes require real checks on a narrow screen such as 375×667 and on desktop. Production acceptance must remain read-only; do not insert test ledger entries.
+- Databases, backups, and maintenance materials containing real ledger entries must not enter Git. When a database is missing or a write result is unclear, investigate first; do not create an empty production database or automatically retry the write.
 
-## 文档是完成条件
+## Documentation Is a Completion Requirement
 
-- 每次实现/维护后，主动核对并更新本项目 docs 和相关部署源文件；架构/API/交互/目录/配置/权限/备份/发布 变化都要有对应的最新说明。
-- 共享状态有变化时同时更新 agent-config 的服务器上下文与其他受影响项目，不只写 Ledger。
-- 覆盖过时信息、删除冗余旧方案，不在当前文档保留操作流水账；历史由 Git 保存。没有变化的文档不必机械修改日期。
-- 推送后运行 `~/agent-config/skills/server-operations/scripts/sync-docs.sh Ledger` 同步服务器 `/opt/ledger/docs` 和本入口（改了共享文档就不带参数，全部同步）；本机程序发布不同步文档。服务器副本不能独立演进，现场编辑必须回写仓库。
+- Agent instructions, maintenance documentation, technical plans, handoffs, and similar agent-authored operational documents default to English unless the user explicitly requests another language. User-facing product content and output may use the language the user requests.
+- After every implementation or maintenance task, proactively check and update this project's docs and relevant deployment sources. Changes to architecture, APIs, interactions, directories, configuration, permissions, backups, or releases require corresponding current documentation.
+- When shared state changes, also update agent-config's server context and every other affected project; do not document the change only in Ledger.
+- Replace outdated information and remove redundant old plans. Do not retain operational logs in current documentation; Git preserves history. Do not mechanically change dates in unaffected documents.
+- After pushing, run `~/agent-config/skills/server-operations/scripts/sync-docs.sh Ledger` to synchronize the server's `/opt/ledger/docs` and this entry point. If shared documentation also changed, omit the argument and synchronize everything. Local program release does not synchronize documentation. Server copies must not evolve independently; write any live edits back to the repository.
 
-## 门户资源同步
+## Portal Resource Synchronization
 
-- 修改网站图标或认证时，同时核对 iPhone 的 apple-touch-icon、构建后路径及匿名 GET/HEAD；只允许明确的品牌图标/公开 manifest 例外，页面、API 和用户媒体仍须认证。统一排障与验收见 server-operations 的 common-issues；实际启用状态以 current-state 为准。
+- When changing website icons or authentication, also check the iPhone `apple-touch-icon`, built paths, and anonymous GET/HEAD behavior. Only explicitly identified brand icons and public manifests may be exceptions; pages, APIs, and user media must remain authenticated. See `server-operations` `common-issues` for unified troubleshooting and acceptance. Treat `current-state` as authoritative for whether the integration is actually enabled.
 
-- 本项目的 `deploy/portal.json` 是 ServerPortal 资源声明的维护源，记录目录用途、数据库、运行用户、端口、unit、访问路径、API 与备份类型。新增/迁移/删除数据根、接口或运行材料时，必须同步修改声明、对应 docs 与共享应用清单。
-- 声明部署在 `/opt/ledger/config/portal.json`，root 管理；本机发布共用 server-operations 校验器，发布前预检，发布后通过受限 SSH 自动同步并核对门户加载哈希。`registry.d/ledger.json` 自动登记链接，更新无需重启门户。
-- 统一认证由共享 Nginx 与门户负责，不在本项目另存设备白名单；本机调用和发布健康检查按共享约定保留。生产已启用设备认证；变更后同步 server-operations current-state。
-- 门户只读展示不替代本项目原生一致性备份；备份格式或媒体生命周期变化时，针对受影响的备份与恢复契约做隔离验证。真实业务数据、凭据和备份仍不得进入 Git。
+- This project's `deploy/portal.json` is the maintained source for ServerPortal resource declarations. It records directory purposes, databases, the runtime user, port, unit, access paths, APIs, and backup types. When adding, migrating, or removing a data root, interface, or runtime material, update the declaration, corresponding docs, and shared application inventory together.
+- The declaration is deployed to root-managed `/opt/ledger/config/portal.json`. Local release uses the shared `server-operations` validator: it runs a preflight before release, then automatically synchronizes the declaration through restricted SSH and verifies the hash loaded by the portal afterward. `registry.d/ledger.json` registers the link automatically; updates do not require a portal restart.
+- Shared Nginx and the portal provide unified authentication. Do not store another device allowlist in this project. Retain the shared conventions for local calls and release health checks. Device authentication is enabled in production; after changes, synchronize `server-operations` `current-state`.
+- The portal's read-only display does not replace this project's native consistent backups. When backup formats or media lifecycles change, validate the affected backup and restoration contracts on an isolated copy. Real business data, credentials, and backups still must not enter Git.
 
-本机发布自动预检和同步同提交的 `deploy/portal.json`；仅更新声明运行 `make portal`，保留业务程序版本。
+Local release automatically preflights and synchronizes the committed `deploy/portal.json`. To update only the declaration, run `make portal`; this preserves the business-program version.
 
-网页默认拦截 Tab / Shift+Tab 控件切换并取消焦点高亮；只保留用户明确要求的例外。维护与验证按 [server-operations 网页键盘与焦点约定](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/conventions.md#网页键盘与焦点) 执行。
-Ledger 当前快捷键、三字段循环与面板焦点行为已获用户确认，除非用户另提要求，否则保持现状。
+Web pages block Tab / Shift+Tab from moving between controls by default and remove focus highlights; retain only exceptions explicitly requested by the user. Maintain and validate this behavior according to the [server-operations web keyboard and focus conventions](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/conventions.md#网页键盘与焦点).
+Ledger's current shortcuts, three-field cycle, and panel focus behavior have been approved by the user. Preserve them unless the user requests otherwise.
