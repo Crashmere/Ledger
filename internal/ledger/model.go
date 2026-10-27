@@ -75,17 +75,18 @@ type TransactionInput struct {
 
 // TransactionFilter 不包含分页：列表、汇总和图表必须共享同一完整匹配集。
 type TransactionFilter struct {
-	DateFrom     string   `json:"dateFrom,omitempty"`
-	DateTo       string   `json:"dateTo,omitempty"`
-	Types        []string `json:"types,omitempty"`
-	AccountIDs   []string `json:"accountIds,omitempty"`
-	CategoryIDs  []string `json:"categoryIds,omitempty"`
-	AmountMin    *int64   `json:"amountMin,omitempty"`
-	AmountMax    *int64   `json:"amountMax,omitempty"`
-	Keyword      string   `json:"keyword,omitempty"`
-	SearchFields []string `json:"searchFields,omitempty"`
-	ExcludedIDs  []string `json:"excludedIds,omitempty"`
-	ProjectScope string   `json:"projectScope,omitempty"`
+	DateFrom            string   `json:"dateFrom,omitempty"`
+	DateTo              string   `json:"dateTo,omitempty"`
+	Types               []string `json:"types,omitempty"`
+	AccountIDs          []string `json:"accountIds,omitempty"`
+	CategoryIDs         []string `json:"categoryIds,omitempty"`
+	ExcludedCategoryIDs []string `json:"excludedCategoryIds,omitempty"`
+	AmountMin           *int64   `json:"amountMin,omitempty"`
+	AmountMax           *int64   `json:"amountMax,omitempty"`
+	Keyword             string   `json:"keyword,omitempty"`
+	SearchFields        []string `json:"searchFields,omitempty"`
+	ExcludedIDs         []string `json:"excludedIds,omitempty"`
+	ProjectScope        string   `json:"projectScope,omitempty"`
 }
 type TransactionQuery struct {
 	Filter           TransactionFilter `json:"filter"`

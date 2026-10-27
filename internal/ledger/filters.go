@@ -56,6 +56,17 @@ func buildFilter(f TransactionFilter) (string, []any, error) {
 	if err = appendIDs("t.category_id", f.CategoryIDs); err != nil {
 		return "", nil, err
 	}
+	excludedCategories, err := uniqueIDs(f.ExcludedCategoryIDs)
+	if err != nil {
+		return "", nil, err
+	}
+	if len(excludedCategories) > 0 {
+		// A category exclusion must retain uncategorized entries and transfers.
+		where = append(where, "(t.category_id IS NULL OR t.category_id NOT IN ("+placeholders(len(excludedCategories))+"))")
+		for _, id := range excludedCategories {
+			args = append(args, id)
+		}
+	}
 	excluded, err := uniqueIDs(f.ExcludedIDs)
 	if err != nil {
 		return "", nil, err

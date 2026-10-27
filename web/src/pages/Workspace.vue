@@ -54,8 +54,10 @@ const parseArray = (key: string) => {
   }
 };
 const selectedAccounts = ref(queryText("account").split(",").filter(Boolean));
+const excludedCategories = ref(parseArray("excludedCategories"));
 const selectedCategories = ref(
-  queryText("category") ? [queryText("category")] : parseArray("categories"),
+  (queryText("category") ? [queryText("category")] : parseArray("categories"))
+    .filter((c) => !excludedCategories.value.includes(c)),
 );
 const selectedTypes = ref<TxnType[]>(
   (queryText("types") || queryText("type"))
@@ -172,6 +174,9 @@ const filter = computed<TransactionFilter>(() => {
         ? categoryIds
         : ["missing-category"]
       : [],
+    excludedCategoryIds: categories.value
+      .filter((c) => excludedCategories.value.includes(c.name))
+      .map((c) => c.id),
     types: selectedTypes.value,
     keyword: keyword.value,
     searchFields: fields.value,
@@ -223,6 +228,8 @@ const currentQuery = () => {
     q.account = selectedAccounts.value.join(",");
   if (selectedCategories.value.length)
     q.categories = JSON.stringify(selectedCategories.value);
+  if (excludedCategories.value.length)
+    q.excludedCategories = JSON.stringify(excludedCategories.value);
   if (selectedTypes.value.length) q.types = selectedTypes.value.join(",");
   if (keyword.value) q.q = keyword.value;
   if (fields.value.join(",") !== allSearchFields.join(","))
@@ -365,7 +372,7 @@ async function initialize(background = false) {
     categories.value = keepUnchanged(categories.value, c);
     if (queryText("cat")) {
       const cat = c.find((x) => x.id === queryText("cat"));
-      if (cat)
+      if (cat && !excludedCategories.value.includes(cat.name))
         selectedCategories.value = keepUnchanged(selectedCategories.value, [
           cat.name,
         ]);
@@ -388,6 +395,7 @@ const filterKeys = [
   "account",
   "categories",
   "category",
+  "excludedCategories",
   "types",
   "type",
   "q",
@@ -408,9 +416,11 @@ watch(
   () => {
     if (querySignature(route.query) === querySignature(currentQuery())) return;
     selectedAccounts.value = queryText("account").split(",").filter(Boolean);
-    selectedCategories.value = queryText("category")
+    excludedCategories.value = parseArray("excludedCategories");
+    selectedCategories.value = (queryText("category")
       ? [queryText("category")]
-      : parseArray("categories");
+      : parseArray("categories"))
+      .filter((c) => !excludedCategories.value.includes(c));
     selectedTypes.value = (queryText("types") || queryText("type"))
       .split(",")
       .filter((v): v is TxnType =>
@@ -468,6 +478,7 @@ watch(
 function resetFilters() {
   selectedAccounts.value = [];
   selectedCategories.value = [];
+  excludedCategories.value = [];
   selectedTypes.value = [];
   min.value = null;
   max.value = null;
@@ -476,6 +487,7 @@ function resetFilters() {
 function selectScope(id: string) {
   selectedAccounts.value = id ? [id] : [];
   selectedCategories.value = [];
+  excludedCategories.value = [];
   excluded.value = [];
   range.value =
     accounts.value.find((a) => a.id === id)?.kind === "project"
@@ -683,6 +695,7 @@ function toggleField(v: SearchField) {
     );
 }
 function drilldown(name: string) {
+  excludedCategories.value = excludedCategories.value.filter((c) => c !== name);
   selectedCategories.value = [name];
   selectedTypes.value = [direction.value];
   view.value = "list";
@@ -1010,12 +1023,14 @@ onUnmounted(() => {
                       v-if="
                         selectedTypes.length +
                         selectedCategories.length +
+                        excludedCategories.length +
                         (min !== null || max !== null ? 1 : 0)
                       "
                       >·
                       {{
                         selectedTypes.length +
                         selectedCategories.length +
+                        excludedCategories.length +
                         (min !== null || max !== null ? 1 : 0)
                       }}</span
                     >
@@ -1040,6 +1055,7 @@ onUnmounted(() => {
                       v-model:types="selectedTypes"
                       v-model:accountIds="selectedAccounts"
                       v-model:categoryNames="selectedCategories"
+                      v-model:excludedCategoryNames="excludedCategories"
                       v-model:min="min"
                       v-model:max="max"
                       @reset="resetFilters"
@@ -1078,6 +1094,8 @@ onUnmounted(() => {
                     v-if="selectedCategories.length"
                   >
                     · {{ selectedCategories.join("、") }}</span
+                  ><span v-if="excludedCategories.length">
+                    · 排除 {{ excludedCategories.join("、") }}</span
                   ><span v-if="keyword"> · “{{ keyword }}”</span></span
                 ><button
                   v-if="excluded.length"

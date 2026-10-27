@@ -29,7 +29,7 @@ export interface TransactionInput {
 export type SearchField = 'title' | 'note' | 'category' | 'amount';
 export interface TransactionFilter {
   dateFrom?: string; dateTo?: string; types?: TxnType[]; accountIds?: Id[];
-  categoryIds?: Id[]; amountMin?: Cents; amountMax?: Cents;
+  categoryIds?: Id[]; excludedCategoryIds?: Id[]; amountMin?: Cents; amountMax?: Cents;
   keyword?: string; searchFields?: SearchField[];
   excludedIds?: Id[]; projectScope?: 'all' | 'exclude' | 'selected';
 }

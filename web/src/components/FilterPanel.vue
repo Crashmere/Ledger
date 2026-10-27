@@ -15,6 +15,9 @@ const accountIds = defineModel<string[]>("accountIds", { required: true });
 const categoryNames = defineModel<string[]>("categoryNames", {
   required: true,
 });
+const excludedCategoryNames = defineModel<string[]>("excludedCategoryNames", {
+  required: true,
+});
 const min = defineModel<number | null>("min", { required: true });
 const max = defineModel<number | null>("max", { required: true });
 const open = ref(props.alwaysOpen || false);
@@ -34,6 +37,7 @@ const count = computed(
     types.value.length +
     accountIds.value.length +
     categoryNames.value.length +
+    excludedCategoryNames.value.length +
     Number(min.value !== null || max.value !== null),
 );
 const typeOptions = computed(() =>
@@ -47,6 +51,14 @@ function toggle<T>(list: T[], value: T): T[] {
   return list.includes(value)
     ? list.filter((v) => v !== value)
     : [...list, value];
+}
+function selectCategory(name: string) {
+  excludedCategoryNames.value = excludedCategoryNames.value.filter((v) => v !== name);
+  categoryNames.value = toggle(categoryNames.value, name);
+}
+function excludeCategory(name: string) {
+  categoryNames.value = categoryNames.value.filter((v) => v !== name);
+  excludedCategoryNames.value = toggle(excludedCategoryNames.value, name);
 }
 function toggleOpen() {
   open.value = !open.value;
@@ -127,6 +139,15 @@ defineExpose({ resetDraft });
         {{ c }}<AppIcon name="close" :size="12" />
       </button>
       <button
+        v-for="c in excludedCategoryNames"
+        :key="'excluded-' + c"
+        class="filter-tag filter-tag-excluded"
+        :aria-label="'取消排除 ' + c"
+        @click="excludedCategoryNames = excludedCategoryNames.filter((v) => v !== c)"
+      >
+        排除 {{ c }}<AppIcon name="close" :size="12" />
+      </button>
+      <button
         v-if="min !== null || max !== null"
         class="filter-tag"
         @click="
@@ -184,11 +205,18 @@ defineExpose({ resetDraft });
             v-for="c in categories"
             :key="c"
             class="choice"
-            :class="{ on: categoryNames.includes(c) }"
-            :aria-pressed="categoryNames.includes(c)"
-            @click="categoryNames = toggle(categoryNames, c)"
+            :class="{
+              on: categoryNames.includes(c),
+              excluded: excludedCategoryNames.includes(c),
+            }"
+            :aria-pressed="categoryNames.includes(c) || excludedCategoryNames.includes(c)"
+            :aria-label="excludedCategoryNames.includes(c) ? '已排除 ' + c : c"
+            title="左键选中 · 右键排除"
+            @click="selectCategory(c)"
+            @contextmenu.prevent="excludeCategory(c)"
           >
-            {{ c }}</button
+            <AppIcon v-if="excludedCategoryNames.includes(c)" name="close" :size="12" />
+            <span>{{ c }}</span></button
           ><span v-if="!categories.length" class="muted">暂无分类</span>
         </div>
       </div>
@@ -267,6 +295,10 @@ defineExpose({ resetDraft });
   max-width: 100%;
   overflow-wrap: anywhere;
 }
+.filter-tag-excluded {
+  color: var(--expense);
+  background: var(--expense-soft);
+}
 .filter-body {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -302,6 +334,17 @@ defineExpose({ resetDraft });
   border-color: var(--primary);
   color: var(--primary);
   background: var(--primary-soft);
+}
+.choice.excluded {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-color: var(--expense);
+  color: var(--expense);
+  background: var(--expense-soft);
+}
+.choice.excluded > span {
+  text-decoration: line-through;
 }
 .choice small {
   margin-left: 5px;

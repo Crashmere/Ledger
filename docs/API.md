@@ -72,6 +72,7 @@ Transaction responses use `Transaction` and do not contain `tags`. Tag resources
 | types | Array of income/expense/transfer types |
 | accountIds | Matches an account on either end |
 | categoryIds | Category IDs; same-name categories from multiple accounts may be submitted together |
+| excludedCategoryIds | Removes transactions in any listed category from the list, day subtotals, and every statistic; at most 500 IDs. Uncategorized entries and transfers remain eligible. When an ID is also in `categoryIds`, exclusion takes precedence |
 | amountMin/amountMax | Inclusive bounds in cents |
 | keyword | Trimmed literal Unicode substring, case-insensitive; `%` and `_` have no special meaning |
 | searchFields | `title`/`note`/`category`/`amount`; when a keyword is present, 1–4 fields must be selected. `amount` parses the keyword as yuan (at most two decimal places; ignores ¥/￥, thousands-separator commas, spaces, and signs) and requires an exact transaction-amount match. If parsing fails, that field does not match |
