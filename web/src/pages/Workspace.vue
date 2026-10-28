@@ -148,7 +148,7 @@ const scopeName = computed(
     scopeAccount.value?.name ||
     (selectedAccounts.value.length
       ? selectedAccounts.value.length + " 个账户"
-      : "日常账本"),
+      : "总览"),
 );
 const uniqueCategories = computed(() => [
   ...new Set(
@@ -774,7 +774,7 @@ onUnmounted(() => {
           :value="scopeAccount?.id || ''"
           @change="selectScope(($event.target as HTMLSelectElement).value)"
         >
-          <option value="">日常账本</option>
+          <option value="">总览</option>
           <option v-for="a in accounts" :value="a.id" :key="a.id">
             {{ a.name }}{{ a.kind === "project" ? " · 专项" : "" }}
           </option>
@@ -809,7 +809,7 @@ onUnmounted(() => {
             :class="{ on: !selectedAccounts.length }"
             @click="selectScope('')"
           >
-            <AppIcon name="ledger" :size="17" />日常账本
+            <AppIcon name="ledger" :size="17" />总览
           </button>
           <template v-for="kind in ['normal', 'project']" :key="kind"
             ><div class="rail-label">
@@ -847,7 +847,7 @@ onUnmounted(() => {
             </button>
           </div>
           <div class="rail-footer">
-            日常账本汇总普通账户。<br />选择专项可查看其独立收支。
+            总览汇总普通账户。<br />选择专项可查看其独立收支。
           </div>
         </aside>
         <main class="work-area">
