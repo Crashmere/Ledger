@@ -21,6 +21,14 @@ commit=$1
 expected=$2
 app=/opt/ledger
 database=$app/data/ledger.sqlite
+nas=false
+upgrade=/opt/server-context/scripts/upgrade-state.py
+if [[ -r /etc/server-maintenance-host && $(< /etc/server-maintenance-host) == nas ]]; then
+  nas=true
+  test -f "$upgrade"
+  exec 8>/run/lock/server-maintenance.lock
+  flock -s -n 8 || { printf 'A full backup or maintenance operation is running.\n' >&2; exit 75; }
+fi
 exec 9>/run/lock/ledger-deploy.lock
 flock -n 9 || { printf 'Another deployment is running.\n' >&2; exit 75; }
 test -f "$database"
@@ -90,13 +98,28 @@ printf 'commit=%s\nsha256=%s\n' "$commit" "$expected" > "$release/metadata"
 backup="$app/backups/before-deploy-$(basename "$release").sqlite"
 stopped=true
 systemctl stop ledger
-runuser -u ledger -- timeout 60 "$app/bin/ledger" backup --db "$database" --out "$backup"
-runuser -u ledger -- timeout 30 "$release/ledger" check --db "$backup"
+if [[ $nas == true ]]; then
+  candidate_data=$(python3 "$upgrade" begin --app ledger --release "$(basename "$release")")
+  backup="/var/lib/server-upgrades/ledger/$(basename "$release")"
+  runuser -u ledger -- timeout 30 "$release/ledger" check --db "$candidate_data/ledger.sqlite"
+else
+  runuser -u ledger -- timeout 60 "$app/bin/ledger" backup --db "$database" --out "$backup"
+  runuser -u ledger -- timeout 30 "$release/ledger" check --db "$backup"
+fi
 install -m 0755 "$release/ledger" "$app/bin/ledger.next"
 replaced=true
 mv -f "$app/bin/ledger.next" "$app/bin/ledger"
 systemctl start ledger
 wait_healthy
+if [[ $nas == true ]]; then
+  systemctl stop ledger
+  python3 "$upgrade" verify --app ledger --release "$(basename "$release")"
+  systemctl start ledger
+  wait_healthy
+fi
 printf '%s\n' "$commit" > "$app/current-commit"
 chmod 0644 "$app/current-commit"
-printf 'Deployed %s; backup: %s\n' "$commit" "$backup"
+if [[ $nas == true ]]; then
+  python3 "$upgrade" accept --app ledger --release "$(basename "$release")"
+  printf 'Deployed %s.\n' "$commit"
+else printf 'Deployed %s; backup: %s\n' "$commit" "$backup"; fi

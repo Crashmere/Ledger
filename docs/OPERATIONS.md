@@ -12,19 +12,20 @@ Request size: both the Nginx and JSON limits are 2 MiB. The shared authenticatio
 
 ## Current Deployment
 
-Live environment last checked: 2026-09-27. Use the commands below to inspect the version, PID, disk usage, and latest backup filename rather than hard-coding volatile values in this document.
+`nas` is the application target; consult server-operations current-state for migration activation. Use the commands below to inspect volatile versions, process state, and disk use.
 
 ```text
-Browser /ledger/ → shared Nginx HTTPS :443 → Go 127.0.0.1:18080 → SQLite file
+Public /ledger/ → VPS HTTPS :8443 (or temporary ALI :443) → reverse SSH → NAS Go :18080 → SQLite
+Home /ledger/ → NAS local-CA HTTPS :443 → NAS Go 127.0.0.1:18080 → same SQLite
 ```
 
-Administrators use the SSH alias `ali`; the real address is maintained in local SSH configuration. The service uses an IP certificate and shared device authentication, with no domain. Authorized devices may read and write. The Go binary embeds the Vue pages, so the server does not need a frontend process, Go compiler, Docker, or database service. Consult the shared inventory for software present for other purposes.
+Administrators use `ssh nas` for the application and `ssh vps`/`ssh ali` for their gateways; explicitly read each target's `/opt/AGENTS.md`. Addresses stay in trusted SSH configuration. Both HTTPS entrances retain shared device authentication, and authorized devices may read and write. The Go binary embeds Vue, so NAS needs no frontend process, Go compiler, Docker, or database service.
 
 ```text
 /opt/ledger/
   AGENTS.md                  Project maintenance entry point
   bin/ledger                 Running program with embedded Vue
-  bin/backup.sh              Daily consistent backup and rotation
+  bin/backup.sh              Legacy native daily backup tool; not scheduled on NAS
   bin/deploy-ssh.sh          Restricted SSH release entry point
   bin/deploy-release.sh      Fixed root-managed release script
   config/ledger.env          Listener, database, program, and backup paths
@@ -33,7 +34,7 @@ Administrators use the SSH alias `ali`; the real address is maintained in local 
   config/ledger-backup.service
   config/ledger-backup.timer
   data/ledger.sqlite         Only authoritative ledger; may have -wal and -shm companions
-  backups/                   Daily, manual, and pre-release backups
+  backups/                   Legacy native materials; no routine NAS snapshots
   current-commit             Git commit corresponding to the current program
   releases/                  Program, previous version, and result for each local release
   docs/                      Current project docs and SOURCE origin marker
@@ -64,7 +65,7 @@ systemd units are linked from `/etc/systemd/system/ledger*` to `config`. Nginx's
 
 ## Read-Only Inspection
 
-Run `ssh ali` locally first. The current administrator is root, so the following inspection commands omit sudo; an ordinary account may need permission to read logs and private directories.
+Run `ssh nas` locally and read `/opt/AGENTS.md` first. Administrator checks omit sudo; an ordinary account may need permission to read logs and private directories.
 
 ```sh
 systemctl status ledger nginx --no-pager
@@ -118,7 +119,7 @@ sudo systemctl list-timers ledger-backup.timer --no-pager
 curl --fail http://127.0.0.1:18080/healthz
 ```
 
-Adjust the initial filename to the actual file. The installation script exits if `/opt/ledger`, an old data location, a Ledger unit, or occupied port 18080 already exists. It creates users, directories, and configuration; uses `restore` to create the authoritative consistent copy; enables the service and timer; and performs the first backup. It does not install Nginx or modify the shared entry point.
+Adjust the initial filename to the verified source. The installer refuses existing Ledger paths/units or occupied port 18080, creates the identity/configuration, and uses `restore` to create the database. It starts the service but leaves native backup scheduling disabled by default and does not create an internal daily snapshot. Complete migration instead transfers all cold application state, not just this database. The installer does not replace shared Nginx.
 
 First establish the apps server according to the shared rebuilding guide, then enable this application. If the link already exists, inspect it rather than overwriting it forcibly:
 
@@ -137,7 +138,7 @@ Check the resource prefix and public access; port 18080 must not be publicly ope
 
 ## Backups
 
-`ledger-backup.timer` runs every day at 03:00 Beijing time with up to five minutes of randomized delay and catches up after missed runs. The script uses `VACUUM INTO` to create a consistent snapshot containing committed WAL content. After integrity and foreign-key checks pass, it retains the latest 14 `daily-*.sqlite` files. Pre-release backups rotate under the shared release-retention policy; manual backups are not cleaned automatically.
+NAS routine backups are manual complete compressed archives to an explicitly identified external volume, triggered through Portal or the agent. The controlled job pauses business/background services, cold-copies full data/config/program state to external staging, resumes previously running services, then compresses and verifies that immutable staging. Ledger coverage includes every database table and historical migration file, not only the main live database. No routine staging/archive, native daily timer, or automatic backup deletion runs on NAS.
 
 Inspect schedule and results:
 
@@ -148,13 +149,7 @@ journalctl -u ledger-backup.service -n 30 --no-pager
 ls -lht /opt/ledger/backups/
 ```
 
-It is normal for the backup service to show inactive after it completes; inspect the journal and `Result` for failure. Backup filenames use UTC and may be one date earlier than Beijing time. The following command immediately creates one daily backup and rotates the oldest one according to the policy:
-
-```sh
-sudo systemctl start ledger-backup.service
-```
-
-For an individual manual backup, run `ledger backup --db <production-path> --out <nonexistent-unique-backup-path>` as user `ledger`; the destination cannot overwrite an existing file. Automatic backups reside on the same disk. On 2026-09-27, a separate all-application data archive was downloaded to the maintenance computer and verified; see the [shared backup note](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/current-state.md#手工数据归档). This application's scripts do not proactively synchronize off-host. The server also has Alibaba Cloud file backup; see [host cloud backup](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/current-state.md#云备份) for scope, 30-day retention, and restoration limits. Transfer only completed backup files when needed; never upload them to the source repository or a publicly served web directory.
+The retained native `backup` command uses `VACUUM INTO` to capture committed WAL content and verifies integrity/foreign keys. It accepts only a new destination file and remains useful for old native packages or isolated database work; it is not the NAS full-state job. Existing ALI and maintenance-computer archives remain preserved; the verified 2026-09-27 data archive and independent ALI Cloud Backup are described in shared current-state. NAS upgrades use the complete temporary local protection in [DEPLOYMENT.md](DEPLOYMENT.md), deleted only after runtime/data acceptance.
 
 <a id="恢复"></a>
 
@@ -167,7 +162,7 @@ Restoration discards ledger entries created after the selected backup. Confirm t
 3. Stop `ledger-backup.timer`, `ledger-backup.service`, and `ledger.service` to prevent writes during maintenance.
 4. Use the old program to create a consistent `before-restore-<unique-identifier>.sqlite` backup from the live database. If database damage prevents backup, stop and preserve the main file and its WAL/SHM before doing anything else; do not continue discarding the evidence.
 5. Preserve the current database and all companion files together in an explicitly identified, brand-new archive directory. Move the validated restoration file to the authoritative `ledger.sqlite` path and verify `ledger` ownership and mode 0600. Do not leave old WAL/SHM files beside the new main database.
-6. Start the application and timer, verify direct/proxied health, then reload the browser and inspect ledger entries read-only. If results are unexpected, stop writes first; do not repeatedly overwrite data.
+6. Start the application, verify direct/proxied health, then reload the browser and inspect ledger entries read-only. Keep the NAS native backup timer disabled. If results are unexpected, stop writes first; do not repeatedly overwrite data.
 
 Prepare and review commands using the actual paths for this restoration. Investigate before continuing after any failed step. Retain the archive and pre-restoration backup temporarily for rollback; cleanup requires an exact file scope and confirmation. This document intentionally provides no fixed-date deletion/replacement commands that could be copied accidentally.
 
@@ -213,10 +208,10 @@ The first switch from version 1 is a coordinated database-and-program change and
 An administrator prepares switch commands using actual unique filenames, verifies and holds the same `/run/lock/ledger-deploy.lock` used by `deploy-release.sh`, and blocks concurrent releases. Do not create ledger entries during maintenance. The scope is Ledger only:
 
 1. Stop `ledger-backup.timer`, `ledger-backup.service`, and `ledger.service`. As user `ledger`, use the current old program to create a consistent `before-schema-upgrade` backup and preserve the old program and its `current-commit`.
-2. As user `ledger`, use the candidate program to create a new version 2 file from that backup and run `check`. Verify every account, category, and transaction field, plus balances and income/expense statistics, without writing test transactions to the authoritative ledger. If any step fails, preserve the evidence, start the original service and timer, and do not switch.
+2. As user `ledger`, create a new version 2 file from that backup and run `check`. Verify all account/category/transaction fields, balances, and income/expense statistics without production writes. On failure, preserve evidence and restart only the original application; NAS scheduling remains disabled.
 3. Archive the old authoritative database and all companion WAL/SHM files together in a new private directory. Move the checked version 2 file to the authoritative path and retain `ledger:ledger` ownership and mode 0600; never mix old WAL/SHM with the new database. Install the hash-verified candidate through a separate `bin/ledger.next`, then atomically rename it over the binary. This is a controlled schema switch; do not invoke the ordinary release script and make the old program back up version 2 again.
-4. Start Ledger and verify direct/proxied health, `/ledger/search`, and ledger entries read-only in the browser. On success, record the candidate program's source commit in `current-commit`, restore the backup timer, create the first version 2 snapshot with the new backup tool, and synchronize this project's documentation and `SOURCE`. Normal local release resumes afterward.
-5. If acceptance fails and no new write has occurred, stop Ledger, preserve the failed version 2 file and its companion files separately, then restore the paired archived old database, old program, and commit marker, and start the original service and timer. If a new write already occurred, back up and confirm the recovery point first; do not automatically discard new entries. A version 1 program cannot run a version 2 database directly.
+4. Start Ledger and verify direct/proxied health, `/ledger/search`, and all affected data read-only. Record `current-commit`, keep NAS native scheduling disabled, and synchronize managed docs. Complete data/runtime validation before removing only this upgrade's temporary local copy.
+5. On failure with no new writes, preserve the failed version 2 database/companions and have the agent restore the explicitly confirmed old data/program/commit pair. If new writes occurred, first preserve them and confirm recovery-point loss; never discard them automatically. A version 1 binary cannot run a version 2 database.
 
 The upgrade does not change shared Nginx, ports, the permission model, or FeeTable. The shared server application inventory does not need an update for this schema change.
 
@@ -227,7 +222,7 @@ The upgrade does not change shared Nginx, ports, the permission model, or FeeTab
 This repository is the source for project documentation; server `/opt/ledger/AGENTS.md` and `/opt/ledger/docs` are copies. After committing and pushing, run the shared synchronization script. It checks drift, installs and verifies files individually, writes `docs/SOURCE`, and cleans managed leftovers. See [maintenance.md documentation synchronization](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/maintenance.md#文档同步):
 
 ```sh
-~/agent-config/skills/server-operations/scripts/sync-docs.sh Ledger
+SYNC_HOST=nas ~/agent-config/skills/server-operations/scripts/sync-docs.sh Ledger
 ```
 
 Ordinary local program release does not synchronize documentation. It automatically applies only the validated `portal.json`; an administrator still installs other runtime configuration.
@@ -266,7 +261,7 @@ Do not use this option instead of a program release for source-code or database-
 
 When data roots, media, backup formats, units, ports, or access paths change, maintain the declaration and corresponding docs in the same commit, update the shared inventory, and verify resource coverage. The portal reads files, media, database tables, and systemd state automatically. A maintenance agent must explicitly maintain directory purposes, API descriptions, and permission boundaries. See [Portal Maintenance](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/portal.md) for the common protocol, failure handling, and new-application integration.
 
-The portal at `/portal/` uniformly protects public access. The release script checks application health through loopback, while the local release's public check expects unauthorized access to return 401. Device authorization remains valid until explicitly revoked, and shared Nginx renews the Cookie on valid requests. If this application adds `add_header`, preserve shared `Set-Cookie` forwarding; see the shared portal-maintenance document for rules and acceptance. Portal backups use this application's native consistent snapshot. At the user's request, real end-to-end restoration acceptance remains deferred; do not automatically resume package download or restoration during this maintenance.
+Portal protects both HTTPS entrances; loopback release checks remain private, and public unauthorized APIs return 401. Device grants persist until revocation, and Nginx renews valid cookies. Preserve shared `Set-Cookie` forwarding when adding headers. NAS Portal backups cold-copy complete state to external staging; they do not use the narrower native snapshot as the full package. Recovery is agent-operated after explicit recovery-point confirmation.
 
 ## Phone Home-Screen Icons
 
@@ -278,6 +273,6 @@ This project is for personal use: a change may be released after validating the 
 
 See [Local Release and Rollback](DEPLOYMENT.md) for the complete process. GitHub stores only source code; local `make release` builds and `make deploy` updates production, while documentation is synchronized separately.
 
-## Automatic Cleanup of Release Materials
+## Release-Material Cleanup
 
-Every day at 05:00 Beijing time, the server follows [Automatic Retention of Release Materials](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/retention.md) to retain the latest 3 successful releases and latest 5 complete pre-release backups while protecting the current version, its corresponding backup, and failed batches awaiting review. `server-operations` maintains the shared implementation, locks, receipts, previews, and disable command. This project's `deploy` retains the release script's `recovery` marker and the daily backup's `flock` entry point. During first-time installation, create `/run/lock/ali-release-retention.lock` according to the shared documentation before enabling the backup timer. Daily and manual backups, business data, portal exports, and maintenance-computer build materials are outside this automatic cleanup scope.
+NAS has no daily backup/release pruning. Successful upgrade acceptance immediately removes only `/var/lib/server-upgrades/ledger/<release>/` and its candidate work copy; failed or uncertain copies remain for the agent. Existing ALI backup materials and maintenance-computer `backups/` are untouched. The [legacy retention implementation](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/retention.md) is not enabled for NAS upgrades.

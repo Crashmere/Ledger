@@ -9,7 +9,7 @@ Read [docs/README.md](docs/README.md) first, then use it to navigate to architec
 ## Server Context
 
 - Before deployment, server troubleshooting, coexistence with a new application, or shared-architecture changes, use the `server-operations` skill. Its source is `Crashmere/agent-config/skills/server-operations/SKILL.md`, usually available locally under `~/agent-config`.
-- Even if the client has not loaded that skill, explicitly read `ssh ali 'cat /opt/AGENTS.md'`, then follow its navigation to the shared documentation. SSH does not load remote AGENTS automatically.
+- Explicitly read `ssh nas 'cat /opt/AGENTS.md'` for the application host; read the same entry point on `vps` or temporary gateway `ali` before operating that host. Follow shared current-state for activation. SSH does not load remote instructions automatically.
 - When a common issue may affect other applications (the host, network, shared release/backup patterns, and so on), document the solution in agent-config's `references/common-issues.md` for every affected application. Keep only project-specific parameters and links here.
 - Shared entry points and host conventions belong to agent-config. This project maintains only Ledger's program, location, unit, data, and release materials. Cross-project changes must assess every application in the shared inventory.
 - Use only the authorization table in `server-operations` `SKILL.md` to decide what to complete and report afterward versus what to confirm first. Documentation maintenance and synchronization, cleanup of known junk, and applying an existing `common-issues` solution do not require advance confirmation.
@@ -27,7 +27,7 @@ Read [docs/README.md](docs/README.md) first, then use it to navigate to architec
 - After every implementation or maintenance task, proactively check and update this project's docs and relevant deployment sources. Changes to architecture, APIs, interactions, directories, configuration, permissions, backups, or releases require corresponding current documentation.
 - When shared state changes, also update agent-config's server context and every other affected project; do not document the change only in Ledger.
 - Replace outdated information and remove redundant old plans. Do not retain operational logs in current documentation; Git preserves history. Do not mechanically change dates in unaffected documents.
-- After pushing, run `~/agent-config/skills/server-operations/scripts/sync-docs.sh Ledger` to synchronize the server's `/opt/ledger/docs` and this entry point. If shared documentation also changed, omit the argument and synchronize everything. Local program release does not synchronize documentation. Server copies must not evolve independently; write any live edits back to the repository.
+- After pushing managed documentation, run `SYNC_HOST=nas ~/agent-config/skills/server-operations/scripts/sync-docs.sh Ledger` to synchronize `/opt/ledger/docs` and this entry point. Synchronize shared gateway context to its own hosts. Local program release does not synchronize documentation; server copies must not evolve independently.
 
 ## Portal Resource Synchronization
 

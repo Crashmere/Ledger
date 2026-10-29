@@ -6,6 +6,8 @@ GitHub is used only to back up source code and configuration, and Actions is dis
 
 ## Routine Use
 
+`make deploy` targets `nas` and its dedicated deployment key. `vps` provides the public HTTPS entrance on port 8443; the temporary `ali` entrance forwards to the same NAS application. Public-check overrides and host-specific keys are maintained in the shared release guide. Explicit legacy ALI deployment must not create a second writer after migration.
+
 ```sh
 # Validate the changed functionality locally, then commit and push the source.
 git add <files-changed-in-this-task>
@@ -23,7 +25,7 @@ Use `make portal` to update only portal information. It preflights and synchroni
 
 Release uses the restricted `ledger-deploy` identity, whose private key exists only on the maintenance computer. To establish the account for the first time, run `deploy/setup-deploy.sh <local-release-public-key>`; do not initialize an existing account again. The forced command accepts only `deploy`, `portal-check`, and `portal`, and sudo permits only this application's fixed release script.
 
-The switch begins only after upload and verification succeed. Preserve the pre-upgrade backup and `previous`, and restore the old program if the health check fails. Normal releases do not carry production data. An administrator explicitly synchronizes units, Nginx, env, authorization, and release scripts from source; documentation uses the shared `sync-docs.sh`.
+The switch begins only after upload and verification succeed. On `nas`, the shared helper cold-copies complete data/config/program state to root-private `/var/lib/server-upgrades/ledger/<release>/`, checks the candidate on an independent copy, and verifies runtime plus preserved SQLite rows and files. Only successful acceptance deletes that upgrade's local copy; failure or uncertainty retains it. `previous` remains the program rollback artifact. Normal releases do not transfer production data. An administrator installs units, Nginx, env, authorization, and release scripts from source; documentation uses `SYNC_HOST=nas` with the shared `sync-docs.sh`.
 
 The current database is schema 2. A schema 1 program cannot be rolled back by replacing only the binary. Handle database upgrades and restoration separately according to `OPERATIONS`.
 
@@ -36,4 +38,4 @@ make rollback COMMIT=<explicitly-selected-full-old-commit>
 
 Rollback reuses verified artifacts retained locally and still performs backup and health checks. First confirm that the old program is compatible with current data. Program rollback does not restore the database, photos, or device state. To restore data, first choose the recovery point and preserve the current state, then follow the restoration procedure in `OPERATIONS`.
 
-The server retains `program`, `previous`, `metadata`, `result`, and `recovery` under `/opt/ledger/releases/`; `current-commit` records the source of the version actually running. `.local/releases/<commit>/last-deployment.json` records the local deployment result. An upload failure normally occurs before the service is stopped. For a failure after switching, inspect `result` and the journal first. Server release history and ordinary pre-release snapshots rotate automatically according to [Automatic Retention of Release Materials](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/retention.md). Local builds, `manual` and migration materials, and portal export packages are excluded.
+NAS retains `program`, `previous`, `metadata`, `result`, `recovery`, and successful upgrade-acceptance evidence under `/opt/ledger/releases/`; `current-commit` records the source actually running. `.local/releases/<commit>/last-deployment.json` records the local result. Upload failure normally precedes downtime. After a failed switch, inspect `result`, the journal, and the retained private upgrade snapshot before deciding on recovery. NAS has no routine backup/failed-upgrade rotation; agent-operated cleanup requires an identified scope. [Legacy automatic retention](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/retention.md) belongs to `ali`, not the NAS upgrade snapshots.

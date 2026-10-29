@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Shared backup/cleanup lock must exist before enabling the backup timer.
-[[ -f /run/lock/ali-release-retention.lock ]] || {
+# Native daily backups are opt-in only for legacy hosts; NAS uses manual external backups.
+[[ ${ENABLE_APP_BACKUP_TIMER:-false} != true || -f /run/lock/ali-release-retention.lock ]] || {
   echo 'Prepare the server-operations retention tmpfiles lock before installing this application.' >&2
   exit 1
 }
+if [[ ${ENABLE_APP_BACKUP_TIMER:-false} == true && -r /etc/server-maintenance-host && $(< /etc/server-maintenance-host) == nas ]]; then
+  echo 'Scheduled internal application backups are disabled on NAS.' >&2; exit 1
+fi
 if [[ "$EUID" -ne 0 || $# -ne 2 ]]; then
   printf 'Usage: sudo bash deploy/install.sh <linux-binary> <verified-initial-database>\n' >&2
   exit 1
@@ -35,7 +38,12 @@ install -m 0644 "$ledger_deploy/ledger.service" "$ledger_deploy/ledger-backup.se
 chown ledger:ledger /opt/ledger/data/ledger.sqlite
 systemctl link /opt/ledger/config/ledger.service /opt/ledger/config/ledger-backup.service /opt/ledger/config/ledger-backup.timer
 systemctl daemon-reload
-systemctl enable --now ledger.service ledger-backup.timer
-systemctl start ledger-backup.service
+systemctl enable --now ledger.service
+if [[ ${ENABLE_APP_BACKUP_TIMER:-false} == true ]]; then
+  systemctl enable --now ledger-backup.timer
+  systemctl start ledger-backup.service
+else
+  systemctl disable --now ledger-backup.timer
+fi
 curl --fail --silent --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:18080/healthz
 printf '\nLedger installed. Enable /opt/ledger/config/nginx-location.conf in the shared Nginx server after verification.\n'
