@@ -132,7 +132,7 @@ curl --fail http://127.0.0.1/ledger/healthz
 curl --fail http://127.0.0.1/ledger/search
 ```
 
-Check the resource prefix and public access; port 18080 must not be publicly open. Verify cloud-side permissions according to the shared guide. Then configure [local release](DEPLOYMENT.md), update the shared application inventory, and run `sync-docs.sh Ledger` to synchronize documentation. The first-time installation script does not automatically configure the release identity or synchronize documentation.
+Check the resource prefix and public access; port 18080 must not be publicly open. Verify cloud-side permissions according to the shared guide. Then configure [local release](DEPLOYMENT.md), update the shared application inventory, and run `SYNC_HOST=nas ~/agent-config/skills/server-operations/scripts/sync-docs.sh Ledger` after pushing managed documentation. The first-time installation script does not automatically configure the release identity or synchronize documentation.
 
 <a id="备份"></a>
 
@@ -176,7 +176,7 @@ Ledger calls FabricWorld through environment variable `LEDGER_FABRICWORLD_URL`, 
 
 On first enablement, release the FabricWorld version supporting `/api/integrations/ledger` before releasing Ledger. There is no schema change. FabricWorld reuses its existing `operations` table to retain source records indefinitely and prevent duplicates. If FabricWorld is unavailable, only synchronization fails; ledger entry succeeds. Before a long-term rollback of FabricWorld, stop the integration because the old version's daily cleanup deletes integration-operation records older than 7 days. Immediate program rollback after an ordinary health failure does not roll back data. Restoring FabricWorld to an older backup may lose later fabrics and synchronization sources; coordinate and verify before restoration.
 
-Pass synthetic tests before writing to production. Server release history is cleaned automatically under the shared release-retention policy.
+Validate integration writes against synthetic data before production use. NAS has no scheduled release or backup pruning. Successful runtime and affected-data acceptance removes only that upgrade's private protection; failed or uncertain copies remain for the agent under the [shared upgrade-protection policy](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/retention.md).
 
 Use [local release](DEPLOYMENT.md) for routine updates. An administrator may alternatively provide a verified program on standard input to the original fixed release script, preserving backup, validation, and failure rollback.
 
@@ -238,7 +238,7 @@ Ordinary local program release does not synchronize documentation. It automatica
 | Page opens but resources/APIs fail | Build `BASE_PATH`, Vue/API prefixes, proxy prefix stripping, and `Host`; test a deep link |
 | Release fails | Local command output, `last-deployment.json`, `releases/result`, and the service journal; see rollback and troubleshooting in `DEPLOYMENT` |
 | Backup service is inactive | Inspect `Result`, the journal, and files first; a completed oneshot normally exits |
-| Disk usage grows | `data`/`backups`/`releases`; inspect protection/skip reasons from shared retention and do not arbitrarily delete WAL |
+| Disk usage grows | Inspect `data`, preserved legacy `backups`/`releases`, and retained failed upgrade protection in `/var/lib/server-upgrades/ledger`; do not arbitrarily delete WAL or unresolved recovery copies |
 | Write-request outcome is unknown | Verify read-only whether the entry was saved before doing anything else; do not automatically retry the write |
 
 ### Save Delays and Unknown Outcomes
