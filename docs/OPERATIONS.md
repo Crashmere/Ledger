@@ -142,11 +142,10 @@ Use the agent-owned [backup and recovery runbook](https://github.com/Crashmere/a
 
 NAS routine backups are manual complete compressed archives to an explicitly identified external volume, triggered through agent-only server-operations tooling. The controlled job pauses business/background services, cold-copies full data/config/program state to external staging, resumes previously running services, then compresses and verifies that immutable staging. Ledger coverage includes every database table and historical migration file, not only the main live database. No routine staging/archive, native daily timer, or automatic backup deletion runs on NAS.
 
-Inspect schedule and results:
+Confirm that the preserved legacy timer is inactive and not enabled on NAS; its journal and archive directory describe historical native jobs, not the current external backup workflow:
 
 ```sh
-systemctl list-timers ledger-backup.timer --no-pager
-systemctl cat ledger-backup.timer ledger-backup.service
+systemctl show ledger-backup.timer -p ActiveState -p UnitFileState
 journalctl -u ledger-backup.service -n 30 --no-pager
 ls -lht /opt/ledger/backups/
 ```

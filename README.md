@@ -2,7 +2,7 @@
 
 个人记账 Web 服务：Vue 提供页面，Go 提供 API、业务计算和静态资源，SQLite 保存账本。应用只运行一个 Go 程序，不需要 Docker、Node 或独立数据库服务；多应用共用服务器时，由共享 Nginx 按 URL 路径分发。
 
-界面以一个账本工作台为中心：选择账户范围后，在共享日期和筛选条件下切换明细与洞察。单笔录入、文本批量录入、账户及分类管理在侧面板中完成，关闭后回到原账目范围。交易按页读取，余额、筛选、年化和统计在后端完成。没有登录；知道访问地址的人可以查看和修改。必须联网使用。
+界面以一个账本工作台为中心：选择账户范围后，在共享日期和筛选条件下切换明细与洞察。单笔录入、文本批量录入、账户及分类管理在侧面板中完成，关闭后回到原账目范围。交易按页读取，余额、筛选、年化和统计在后端完成。公网和局域网入口均使用 ServerPortal 统一设备认证，授权设备可以查看和修改。必须联网使用。
 
 ## 本地运行
 
@@ -35,7 +35,7 @@ make build
 
 部署到共享服务器的 `/ledger/` 路径时，使用 `make linux BASE_PATH=/ledger/`。它同时设置静态资源、Vue Router 和 API 前缀；Nginx 去掉此前缀后转发给 Go。默认构建和本地开发仍使用根路径。详见 [部署维护](docs/OPERATIONS.md)。
 
-发布使用[本机部署入口](docs/DEPLOYMENT.md)：本地验证本次功能后执行 `make deploy`，GitHub 仅备份源码。每次发布先备份数据库，失败回退程序，不覆盖账本。
+For `nas` releases, validate the affected behavior locally, then use `make deploy` through the [local deployment entry point](docs/DEPLOYMENT.md). GitHub stores source only. Each upgrade cold-copies complete application state into temporary local protection, removed after runtime and data-preservation checks pass. Failure retains protection and rolls back the program without replacing ledger data.
 
 测试使用临时合成账本，不读取个人财务数据。涵盖转账与删除、筛选、分页完整小计、历史时间、闰年、批量原子性、HTTP 表单、深链接、备份恢复，以及旧库升级后的逐字段保留和失败回滚。
 
@@ -59,7 +59,7 @@ make build
 ./bin/ledger restore --from /path/to/new-backup.sqlite --db /path/to/new-restored.sqlite
 ```
 
-备份和恢复目标都必须不存在。备份使用 SQLite 一致性快照，不能用普通文件复制代替运行中数据库的备份。正式停服替换、systemd 每日备份和更新操作见 [部署维护](docs/OPERATIONS.md)。
+Native backup and restore commands require new destinations and remain available for isolated database work and historical archives. SQLite snapshots must be consistent; do not copy only an active WAL database's main file. Routine `nas` backup and recovery are agent-operated full compressed packages on verified external storage, with no daily backup timer or internal fallback. See [Operations](docs/OPERATIONS.md) for the recovery and upgrade procedures.
 
 当前数据库版本为 2，不包含标签表。旧版本 1 必须用 `./bin/ledger migrate --from <旧库或备份> --db <不存在的新路径>` 生成升级副本；源库保留，普通启动不会自动升级。首次上线的程序与数据库切换、检查和回退见 [数据库升级](docs/OPERATIONS.md#数据库升级)。历史备份保留原版本，restore 不会隐式升级。
 
