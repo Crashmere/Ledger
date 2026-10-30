@@ -138,7 +138,9 @@ Check the resource prefix and public access; port 18080 must not be publicly ope
 
 ## Backups
 
-NAS routine backups are manual complete compressed archives to an explicitly identified external volume, triggered through Portal or the agent. The controlled job pauses business/background services, cold-copies full data/config/program state to external staging, resumes previously running services, then compresses and verifies that immutable staging. Ledger coverage includes every database table and historical migration file, not only the main live database. No routine staging/archive, native daily timer, or automatic backup deletion runs on NAS.
+Use the agent-owned [backup and recovery runbook](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/backup-recovery.md), also at `/opt/server-context/references/backup-recovery.md` on NAS. Portal provides no backup or recovery operation.
+
+NAS routine backups are manual complete compressed archives to an explicitly identified external volume, triggered through agent-only server-operations tooling. The controlled job pauses business/background services, cold-copies full data/config/program state to external staging, resumes previously running services, then compresses and verifies that immutable staging. Ledger coverage includes every database table and historical migration file, not only the main live database. No routine staging/archive, native daily timer, or automatic backup deletion runs on NAS.
 
 Inspect schedule and results:
 
@@ -261,7 +263,7 @@ Do not use this option instead of a program release for source-code or database-
 
 When data roots, media, backup formats, units, ports, or access paths change, maintain the declaration and corresponding docs in the same commit, update the shared inventory, and verify resource coverage. The portal reads files, media, database tables, and systemd state automatically. A maintenance agent must explicitly maintain directory purposes, API descriptions, and permission boundaries. See [Portal Maintenance](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/portal.md) for the common protocol, failure handling, and new-application integration.
 
-Portal protects both HTTPS entrances; loopback release checks remain private, and public unauthorized APIs return 401. Device grants persist until revocation, and Nginx renews valid cookies. Preserve shared `Set-Cookie` forwarding when adding headers. NAS Portal backups cold-copy complete state to external staging; they do not use the narrower native snapshot as the full package. Recovery is agent-operated after explicit recovery-point confirmation.
+Portal protects the NAS, VPS, and compatibility ALI HTTPS entrances; loopback release checks remain private, and public unauthorized APIs return 401. Device grants persist until revocation, and Nginx renews valid cookies. Preserve shared `Set-Cookie` forwarding when adding headers. Agent backups cold-copy complete NAS state to external staging; they do not use the narrower native snapshot as the full package. Recovery is agent-operated after explicit recovery-point confirmation.
 
 ## Phone Home-Screen Icons
 
