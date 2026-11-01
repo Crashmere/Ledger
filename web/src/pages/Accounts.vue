@@ -53,6 +53,11 @@ const deletion = ref<{
 } | null>(null);
 const accountDrag = ref("");
 const categoryDrag = ref("");
+const moving = ref<Category | null>(null);
+const destinationId = ref("");
+const moveTargets = computed(() =>
+  accounts.value.filter((a) => a.id !== moving.value?.accountId),
+);
 useSaveGuard(saving);
 async function load() {
   loading.value = true;
@@ -101,8 +106,36 @@ function fail(e: unknown) {
     !(e instanceof AppError) ||
     ["NETWORK", "RESPONSE", "HTTP", "INTERNAL"].includes(e.code);
   formError.value = uncertain.value
-    ? "保存结果未确认，请关闭面板后核对，当前内容不会重复提交。"
+    ? (moving.value ? "移动" : "保存") +
+      "结果未确认，请关闭面板后核对，当前内容不会重复提交。"
     : (e as Error).message;
+}
+function openMove(c: Category) {
+  if (saving.value) return;
+  moving.value = c;
+  destinationId.value = "";
+  formError.value = "";
+  uncertain.value = false;
+}
+async function moveCategory() {
+  const c = moving.value;
+  if (!c || saving.value || uncertain.value) return;
+  if (!moveTargets.value.some((a) => a.id === destinationId.value)) {
+    formError.value = "请选择目标账户";
+    return;
+  }
+  saving.value = true;
+  try {
+    const result = await categoryService.move(c.id, destinationId.value);
+    moving.value = null;
+    selectedId.value = result.accountId;
+    notice.value = "已移动分类及其全部交易";
+    await load();
+  } catch (e) {
+    fail(e);
+  } finally {
+    saving.value = false;
+  }
 }
 async function save() {
   if (saving.value || uncertain.value) return;
@@ -220,8 +253,13 @@ function showLedger() {
   void router.push({
     path: "/transactions",
     query: {
+      range: route.query.range,
+      from: route.query.from,
+      to: route.query.to,
       account: selectedId.value,
-      ...(selected.value?.kind === "project" ? { range: "all" } : {}),
+      ...(selected.value?.kind === "project"
+        ? { range: "all", from: undefined, to: undefined }
+        : {}),
     },
   });
 }
@@ -361,6 +399,14 @@ onMounted(async () => {
               <AppIcon name="edit" :size="14" /></button
             ><button
               class="icon-btn"
+              :disabled="accounts.length < 2 || saving"
+              :aria-label="'移动分类 ' + c.name + ' 到其他账户'"
+              title="移动到其他账户"
+              @click="openMove(c)"
+            >
+              <AppIcon name="arrow" :size="14" /></button
+            ><button
+              class="icon-btn"
               aria-label="删除分类"
               @click="deletion = { type: 'category', id: c.id, name: c.name }"
             >
@@ -489,6 +535,62 @@ onMounted(async () => {
             type="submit"
           >
             {{ saving ? "正在保存…" : "保存" }}
+          </button>
+        </footer>
+      </form></ModalDialog
+    >
+    <ModalDialog
+      v-if="moving"
+      label="移动分类到其他账户"
+      :busy="saving"
+      @close="moving = null"
+      ><form class="management-form" @submit.prevent="moveCategory">
+        <header>
+          <h3>移动分类</h3>
+          <button
+            type="button"
+            class="icon-btn"
+            aria-label="关闭"
+            :disabled="saving"
+            @click="moving = null"
+          >
+            <AppIcon name="close" :size="18" />
+          </button>
+        </header>
+        <div v-if="formError" class="form-error" role="alert">
+          {{ formError }}
+        </div>
+        <p class="form-hint">
+          “{{ moving.name }}”及其全部交易将一起移动，账户余额和统计会随之更新。
+        </p>
+        <label class="field-label" for="category-destination">目标账户</label>
+        <select
+          id="category-destination"
+          v-model="destinationId"
+          class="input"
+          :disabled="saving || uncertain"
+          required
+        >
+          <option value="" disabled>请选择账户</option>
+          <option v-for="a in moveTargets" :key="a.id" :value="a.id">
+            {{ a.name }}
+          </option>
+        </select>
+        <footer>
+          <button
+            type="button"
+            class="btn btn-ghost"
+            :disabled="saving"
+            @click="moving = null"
+          >
+            取消
+          </button>
+          <button
+            type="submit"
+            class="btn btn-primary"
+            :disabled="saving || uncertain || !destinationId"
+          >
+            {{ saving ? "正在移动…" : "确认移动" }}
           </button>
         </footer>
       </form></ModalDialog

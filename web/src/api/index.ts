@@ -19,6 +19,7 @@ export const categoryService = {
   listByAccount: (id: string) => request<Category[]>('/categories?accountId=' + idPath(id)),
   create: (input: { accountId: string; name: string; color: number }) => request<Category>('/categories', 'POST', input),
   update: (id: string, input: { name: string; color: number }) => request<Category>('/categories/' + idPath(id), 'PUT', input),
+  move: (id: string, accountId: string) => request<Category>('/categories/' + idPath(id) + '/move', 'POST', { accountId }),
   remove: (id: string) => request('/categories/' + idPath(id), 'DELETE'),
   reorder: (id: string, ids: string[]) => request('/accounts/' + idPath(id) + '/categories/reorder', 'POST', { ids }),
 };

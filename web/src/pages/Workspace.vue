@@ -489,10 +489,8 @@ function selectScope(id: string) {
   selectedCategories.value = [];
   excludedCategories.value = [];
   excluded.value = [];
-  range.value =
-    accounts.value.find((a) => a.id === id)?.kind === "project"
-      ? "all"
-      : "month";
+  if (accounts.value.find((a) => a.id === id)?.kind === "project")
+    range.value = "all";
 }
 function changePage(value: number) {
   if (loading.value) return;

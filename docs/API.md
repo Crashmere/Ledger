@@ -27,7 +27,8 @@ Transaction responses include the read-only field `fabricWorldEligible`: it is `
 | POST /api/accounts/reorder | {ids: [...]}, containing every active account |
 | GET /api/categories | `Category[]`; optional `accountId` query parameter, or every active category when omitted |
 | POST /api/categories | {name,color,accountId} |
-| PUT /api/categories/{id} | {name,color}; the owning account cannot be changed |
+| PUT /api/categories/{id} | {name,color}; editing does not change account ownership |
+| POST /api/categories/{id}/move | {accountId}; atomically moves the active category and all linked transactions to a different active account; returns the moved `Category` |
 | DELETE /api/categories/{id} | Removes references from active transactions and marks the category deleted |
 | POST /api/accounts/{id}/categories/reorder | {ids: [...]}, containing every active category for that account |
 | GET /api/transactions/{id} | Complete transaction, including `date` |
@@ -51,6 +52,8 @@ Delete and reorder operations return {ok:true}. The server generates account and
 ```
 
 `kind` is `normal` or `project`. `periodStart` and `periodEnd` inputs are dates; account responses retain epoch milliseconds. The `archived` input is Boolean; the response uses an `archivedAt` timestamp or `null`. Editing does not overwrite the icon, sort order, or creation time.
+
+`POST /api/categories/{id}/move` requires a non-null `accountId` for a different active account. A missing/deleted category or deleted source account returns 404; the current account or an invalid/deleted destination returns 400 with field `accountId`. Archived and project accounts remain valid destinations. The category is appended to the destination's active category order; an existing same-name category is preserved separately. Every transaction referencing the category, including soft-deleted records, receives the destination `accountId`. Category and transaction IDs and all business fields are preserved; only ownership, category order, and affected `updated_at` timestamps change. The operation commits once, rolls back on failure, and does not change initial balances, uncategorized entries, or transfers. Account balances and filtered statistics reflect the new ownership without a schema migration. Do not retry an uncertain result before checking category ownership and transactions.
 
 `TransactionInput`:
 

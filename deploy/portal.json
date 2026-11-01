@@ -108,7 +108,12 @@
     {
       "method": "PUT",
       "path": "/api/categories/{id}",
-      "description": "{name,color}，不能更换所属账户"
+      "description": "{name,color}，编辑不改变所属账户"
+    },
+    {
+      "method": "POST",
+      "path": "/api/categories/{id}/move",
+      "description": "{accountId}，原子移动分类及其全部交易到其他有效账户，返回 Category"
     },
     {
       "method": "DELETE",

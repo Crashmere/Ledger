@@ -62,6 +62,33 @@ func (s *Store) SaveCategory(ctx context.Context, id string, input CategoryInput
 	})
 	return result, err
 }
+func (s *Store) MoveCategory(ctx context.Context, id string, input CategoryMoveInput) (Category, error) {
+	var result Category
+	err := s.transaction(ctx, func(tx *sql.Tx) error {
+		var sourceID string
+		if e := tx.QueryRowContext(ctx, `SELECT c.account_id FROM category c JOIN account a ON a.id=c.account_id WHERE c.id=? AND c.is_delete=0 AND a.is_delete=0`, id).Scan(&sourceID); e == sql.ErrNoRows {
+			return notFound()
+		} else if e != nil {
+			return e
+		}
+		if input.AccountID == sourceID {
+			return invalid("accountId", "请选择其他账户")
+		}
+		if e := exists(ctx, tx, "account", input.AccountID); e != nil {
+			return invalid("accountId", "请选择有效账户")
+		}
+		now := time.Now().UnixMilli()
+		if e := affected(tx.ExecContext(ctx, `UPDATE category SET account_id=?,order_num=(SELECT COALESCE(MAX(order_num),-1)+1 FROM category WHERE account_id=? AND is_delete=0),updated_at=? WHERE id=? AND is_delete=0`, input.AccountID, input.AccountID, now, id)); e != nil {
+			return e
+		}
+		// Deleted transactions retain their category and move with its ownership.
+		if _, e := tx.ExecContext(ctx, "UPDATE txn SET account_id=?,updated_at=? WHERE category_id=?", input.AccountID, now, id); e != nil {
+			return e
+		}
+		return tx.QueryRowContext(ctx, "SELECT id,account_id,name,color,icon,order_num,created_at FROM category WHERE id=?", id).Scan(&result.ID, &result.AccountID, &result.Name, &result.Color, &result.Icon, &result.OrderNum, &result.CreatedAt)
+	})
+	return result, err
+}
 func (s *Store) DeleteCategory(ctx context.Context, id string) error {
 	return s.transaction(ctx, func(tx *sql.Tx) error {
 		if e := exists(ctx, tx, "category", id); e != nil {

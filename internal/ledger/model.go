@@ -47,6 +47,9 @@ type CategoryInput struct {
 	Name      string `json:"name"`
 	Color     int64  `json:"color"`
 }
+type CategoryMoveInput struct {
+	AccountID string `json:"accountId"`
+}
 type Transaction struct {
 	FabricWorldEligible bool    `json:"fabricWorldEligible"`
 	ID                  string  `json:"id"`

@@ -122,6 +122,14 @@ func New(store *ledger.Store, assets fs.FS, options ...Options) http.Handler {
 	mux.HandleFunc("PUT /api/accounts/{id}", s.saveAccount)
 	mux.HandleFunc("POST /api/categories", s.saveCategory)
 	mux.HandleFunc("PUT /api/categories/{id}", s.saveCategory)
+	mux.HandleFunc("POST /api/categories/{id}/move", func(w http.ResponseWriter, r *http.Request) {
+		var input ledger.CategoryMoveInput
+		if !decode(w, r, &input) {
+			return
+		}
+		v, e := store.MoveCategory(r.Context(), r.PathValue("id"), input)
+		reply(w, v, e)
+	})
 	mux.HandleFunc("POST /api/transactions", s.saveTransaction)
 	mux.HandleFunc("PUT /api/transactions/{id}", s.saveTransaction)
 	mux.HandleFunc("DELETE /api/accounts/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -196,6 +204,8 @@ func decode(w http.ResponseWriter, r *http.Request, dest any) bool {
 		}
 	case *ledger.TransactionInput:
 		required = []string{"type", "amount", "accountId", "toAccountId", "categoryId", "date", "title", "note"}
+	case *ledger.CategoryMoveInput:
+		required = []string{"accountId"}
 	}
 	for _, field := range required {
 		value, exists := fields[field]
