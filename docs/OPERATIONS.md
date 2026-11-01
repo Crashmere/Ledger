@@ -152,7 +152,7 @@ journalctl -u ledger-backup.service -n 30 --no-pager
 ls -lht /opt/ledger/backups/
 ```
 
-The retained native `backup` command uses `VACUUM INTO` to capture committed WAL content and verifies integrity/foreign keys. It accepts only a new destination file and remains useful for old native packages or isolated database work; it is not the NAS full-state job. Existing ALI and maintenance-computer archives remain preserved; the verified 2026-09-27 data archive and independent ALI Cloud Backup are described in shared current-state. NAS upgrades use the complete temporary local protection in [DEPLOYMENT.md](DEPLOYMENT.md), deleted only after runtime/data acceptance.
+The retained native `backup` command uses `VACUUM INTO` to capture committed WAL content and verifies integrity/foreign keys. It accepts only a new destination file and remains useful for old native packages or isolated database work; it is not the NAS full-state job. Existing ALI and maintenance-computer archives remain preserved; the verified 2026-09-27 data archive and independent ALI Cloud Backup are described in shared current-state. NAS upgrades use conditional database-only protection in [DEPLOYMENT.md](DEPLOYMENT.md); ordinary releases create no copy, and captured databases remain until runtime/affected-data acceptance.
 
 <a id="恢复"></a>
 
