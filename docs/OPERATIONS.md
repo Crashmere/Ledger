@@ -8,6 +8,8 @@ Contents: [Current Deployment](#current-deployment) · [Read-Only Inspection](#r
 
 Request size: both the Nginx and JSON limits are 2 MiB. The shared authentication subrequest does not impose another body limit. If a request larger than 1 MiB returns 500, troubleshoot it according to [shared authentication mistakenly blocking large requests](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/common-issues.md#统一认证误拦大请求). This application remains responsible for business-field and size validation.
 
+Ledger receives bounded JSON requests. Shared connection-level transfer tuning and cross-project checks are maintained in [Upload throughput and request limits](https://github.com/Crashmere/agent-config/blob/main/skills/server-operations/references/conventions.md#upload-throughput-and-request-limits), also at `/opt/server-context/references/conventions.md` on NAS.
+
 <a id="当前部署"></a>
 
 ## Current Deployment
