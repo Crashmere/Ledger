@@ -44,7 +44,7 @@ export const router = createRouter({
     {
       path: "/transactions",
       name: "transactions",
-      component: lazyPage(() => import("../pages/Workspace.vue"), "账本"),
+      component: lazyPage(() => import("../pages/Workspace.vue"), "Ledger"),
       children: [
         {
           path: "manage",

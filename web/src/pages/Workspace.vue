@@ -765,7 +765,6 @@ onUnmounted(() => {
             alt=""
           />ledger</RouterLink
         >
-        <span class="appbar-label">个人账本</span>
         <select
           class="scope-mobile"
           aria-label="选择账户范围"
@@ -893,7 +892,7 @@ onUnmounted(() => {
           </div>
           <LoadError :message="error" @retry="initialize()" />
           <LoadError :message="refreshError" @retry="refreshOnReturn()" />
-          <PageSkeleton v-if="!initialized && loading" label="账本" />
+          <PageSkeleton v-if="!initialized && loading" label="Ledger" />
           <template v-else>
             <dl class="work-metrics">
               <div class="metric-expense">

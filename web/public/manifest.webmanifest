@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "Ledger 记账",
-  "short_name": "记账",
+  "name": "Ledger",
+  "short_name": "Ledger",
   "lang": "zh-CN",
   "start_url": "./",
   "scope": "./",
