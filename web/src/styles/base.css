@@ -328,7 +328,26 @@
   box-shadow: var(--sh-1);
 }
 .view-content {
+  position: relative;
+  transition: opacity var(--duration-fast) var(--ease-out);
   animation: content-in var(--duration-enter) var(--ease-out);
+}
+.view-content.is-updating { opacity: 0.7; }
+.result-progress {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  background-size: 200% 100%;
+  animation: result-progress 1.2s linear infinite;
+}
+@keyframes result-progress {
+  from { background-position: 200% 0; }
+  to { background-position: 0 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .view-content { transition: none; }
+  .result-progress { animation: none; }
 }
 .data-tools {
   display: flex;

@@ -201,15 +201,16 @@ const page = ref(1);
 const pageSize = ref(10);
 const totalCount = ref(0);
 const loading = ref(true);
+const resultScope = ref<string | null>(null);
+const resultReady = computed(() => resultScope.value === JSON.stringify(selectedAccounts.value));
+const resultStale = ref(false);
 const resultView = ref<HTMLElement | null>(null);
 const pendingResultHeight = ref(0);
 watch(loading, (pending) => {
-  // Reserve the previous result height before the loading skeleton replaces it.
-  // Otherwise the scroll container shrinks and the browser clamps scrollTop to zero.
+  // Keep the current scroll range while a new scope or view replaces the results.
   pendingResultHeight.value = pending ? resultView.value?.offsetHeight || 0 : 0;
   if (pending && resultView.value) {
-    // Removing a focused pagination control can force layout during Vue's child
-    // patch, before the parent's bound style is applied. Reserve the height now.
+    // Child replacement can force layout before the parent's bound style applies.
     resultView.value.style.minHeight = pendingResultHeight.value + "px";
   }
 });
@@ -293,6 +294,7 @@ function keepUnchanged<T>(previous: T, next: T): T {
 }
 async function load(stats = true, background = false) {
   const id = ++request;
+  const scope = JSON.stringify(selectedAccounts.value);
   if (!background) {
     loading.value = true;
     error.value = "";
@@ -320,6 +322,8 @@ async function load(stats = true, background = false) {
         : Promise.resolve({ data: daily.value, error: dailyError.value }),
     ]);
     if (id !== request) return;
+    resultScope.value = scope;
+    resultStale.value = false;
     error.value = "";
     refreshError.value = "";
     transactions.value = keepUnchanged(transactions.value, result.items);
@@ -335,7 +339,8 @@ async function load(stats = true, background = false) {
     }
   } catch (e) {
     if (id === request) {
-      if (background) {
+      if (background || resultReady.value) {
+        if (!background) resultStale.value = true;
         refreshError.value =
           "更新失败，仍显示上次数据：" + (e as Error).message;
         return;
@@ -1116,6 +1121,8 @@ onUnmounted(() => {
                 ref="resultView"
                 id="ledger-view"
                 class="view-content"
+                :class="{ 'is-updating': loading && resultReady }"
+                :inert="resultReady && (loading || resultStale)"
                 :style="
                   pendingResultHeight
                     ? { minHeight: pendingResultHeight + 'px' }
@@ -1125,8 +1132,9 @@ onUnmounted(() => {
                 :aria-labelledby="view === 'list' ? 'list-tab' : 'insights-tab'"
                 :aria-busy="loading"
               >
-                <PageSkeleton v-if="loading" label="筛选结果" compact />
-                <template v-else-if="view === 'list'"
+                <div v-if="loading && resultReady" class="result-progress" role="status" aria-label="正在更新筛选结果" />
+                <PageSkeleton v-if="loading && !resultReady" label="筛选结果" compact />
+                <template v-else-if="resultReady && view === 'list'"
                   ><div v-if="!transactions.length && !error" class="empty">
                     <span class="empty-icon"
                       ><AppIcon name="ledger" :size="27"
@@ -1245,7 +1253,7 @@ onUnmounted(() => {
                     /></div
                 ></template>
                 <InsightView
-                  v-else
+                  v-else-if="resultReady"
                   :summary="summary"
                   :daily="daily"
                   :daily-error="dailyError"
