@@ -14,13 +14,11 @@ func (s *Store) Summary(ctx context.Context, input SummaryQuery) (Summary, error
 		return result, err
 	}
 	err = s.transaction(ctx, func(tx *sql.Tx) error {
-		var first, last sql.NullInt64
 		e := tx.QueryRowContext(ctx, `SELECT
    COALESCE(SUM(CASE WHEN t.type='income' THEN t.amount ELSE 0 END),0),
    COALESCE(SUM(CASE WHEN t.type='expense' THEN t.amount ELSE 0 END),0),
-   COUNT(*),COUNT(CASE WHEN t.type='income' THEN 1 END),COUNT(CASE WHEN t.type='expense' THEN 1 END),COUNT(CASE WHEN t.type='transfer' THEN 1 END),
-   MIN(CASE WHEN t.type='expense' THEN t.time END),MAX(CASE WHEN t.type='expense' THEN t.time END)
-   FROM txn t WHERE `+where, args...).Scan(&result.Income, &result.Expense, &result.TotalCount, &result.IncomeCount, &result.ExpenseCount, &result.TransferCount, &first, &last)
+   COUNT(*),COUNT(CASE WHEN t.type='income' THEN 1 END),COUNT(CASE WHEN t.type='expense' THEN 1 END),COUNT(CASE WHEN t.type='transfer' THEN 1 END)
+   FROM txn t WHERE `+where, args...).Scan(&result.Income, &result.Expense, &result.TotalCount, &result.IncomeCount, &result.ExpenseCount, &result.TransferCount)
 		if e != nil {
 			return e
 		}
@@ -33,17 +31,10 @@ func (s *Store) Summary(ctx context.Context, input SummaryQuery) (Summary, error
 		if result.Net, e = addCents(result.Income, -result.Expense); e != nil {
 			return e
 		}
-		result.Annual.Count = result.ExpenseCount
-		if first.Valid && last.Valid {
-			result.Annual.SpanDays = int64(math.Round(float64(last.Int64-first.Int64) / 86400000))
-		}
-		if result.ExpenseCount >= 2 && result.Annual.SpanDays > 0 {
-			annual := math.Round(float64(result.Expense) / float64(result.Annual.SpanDays) * 365)
-			if annual > float64(MaxCents) {
-				return invalid("amount", "年化金额超出安全范围")
-			}
-			value := int64(annual)
-			result.Annual.Amount = &value
+		today, _ := ParseDate(DateOf(time.Now().UnixMilli()))
+		result.Annual, e = annualStatistics(ctx, tx, where, args, today, input.IncludeAnnualTrend)
+		if e != nil {
+			return e
 		}
 		if input.FlowAccountID != "" {
 			if e = exists(ctx, tx, "account", input.FlowAccountID); e != nil {
@@ -67,6 +58,72 @@ func (s *Store) Summary(ctx context.Context, input SummaryQuery) (Summary, error
 	})
 	return result, err
 }
+
+func annualStatistics(ctx context.Context, tx *sql.Tx, where string, args []any, today time.Time, includeTrend bool) (Annual, error) {
+	result := Annual{}
+	queryArgs := append(append([]any{}, args...), today.AddDate(0, 0, 1).UnixMilli())
+	rows, err := tx.QueryContext(ctx, `SELECT ledger_date(t.time),SUM(t.amount),COUNT(*)
+   FROM txn t WHERE `+where+` AND t.type='expense' AND t.time<? GROUP BY ledger_date(t.time) ORDER BY ledger_date(t.time)`, queryArgs...)
+	if err != nil {
+		return result, err
+	}
+	buckets := map[string]int64{}
+	first := ""
+	var total int64
+	for rows.Next() {
+		var date string
+		var amount, count int64
+		if err = rows.Scan(&date, &amount, &count); err != nil {
+			break
+		}
+		if total, err = addCents(total, amount); err != nil {
+			break
+		}
+		if first == "" {
+			first = date
+		}
+		buckets[date] = amount
+		result.Count += count
+	}
+	if err == nil {
+		err = rows.Err()
+	}
+	rows.Close()
+	if err != nil || first == "" {
+		return result, err
+	}
+	// Calendar-day arithmetic must not depend on historical daylight-saving offsets.
+	start, _ := time.Parse(time.DateOnly, first)
+	end, _ := time.Parse(time.DateOnly, today.Format(time.DateOnly))
+	result.SpanDays = int64(end.Sub(start)/(24*time.Hour)) + 1
+	annualAmount := func(expense, days int64) (int64, error) {
+		amount := math.Round(float64(expense) / float64(days) * 365)
+		if amount > float64(MaxCents) {
+			return 0, invalid("amount", "年化金额超出安全范围")
+		}
+		return int64(amount), nil
+	}
+	amount, err := annualAmount(total, result.SpanDays)
+	if err != nil {
+		return result, err
+	}
+	result.Amount = &amount
+	if includeTrend {
+		result.Days = make([]AnnualPoint, 0, result.SpanDays)
+		var cumulative int64
+		for day := start; !day.After(end); day = day.AddDate(0, 0, 1) {
+			date := day.Format(time.DateOnly)
+			cumulative += buckets[date]
+			value, err := annualAmount(cumulative, int64(len(result.Days))+1)
+			if err != nil {
+				return result, err
+			}
+			result.Days = append(result.Days, AnnualPoint{Date: date, Amount: value})
+		}
+	}
+	return result, nil
+}
+
 func (s *Store) CategoryStatistics(ctx context.Context, input CategoryQuery) ([]CategoryTotal, error) {
 	if input.GroupBy == "" {
 		input.GroupBy = "name"

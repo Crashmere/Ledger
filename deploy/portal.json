@@ -158,7 +158,7 @@
     {
       "method": "POST",
       "path": "/api/statistics/summary",
-      "description": "筛选范围内的收支、净额、笔数、账户流入流出与年化"
+      "description": "筛选收支汇总与首个支出日至今天的年化，可选每日年化曲线"
     },
     {
       "method": "POST",

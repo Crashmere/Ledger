@@ -34,7 +34,8 @@ export const txnService = {
   batch: (rows: BatchRow[]) => request<BatchPreview>('/transactions/batch', 'POST', { rows }),
 };
 export const statsService = {
-  summary: (filter: TransactionFilter, flowAccountId?: string) => request<Summary>('/statistics/summary', 'POST', { filter, flowAccountId }),
+  summary: (filter: TransactionFilter, flowAccountId?: string, includeAnnualTrend = false) =>
+    request<Summary>('/statistics/summary', 'POST', { filter, flowAccountId, includeAnnualTrend }),
   categories: (filter: TransactionFilter, groupBy: 'id' | 'name', direction: 'income' | 'expense') =>
     request<CategoryTotal[]>('/statistics/categories', 'POST', { filter, groupBy, direction }),
   daily: (filter: TransactionFilter) => request<DailyResult>('/statistics/daily', 'POST', { filter }),

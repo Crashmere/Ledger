@@ -98,11 +98,13 @@ Returns {items,page,pageSize,totalCount,dayTotals?}. `page` starts at 1. `pageSi
 
 | Address (all POST) | Input | Return value |
 | --- | --- | --- |
-| /api/statistics/summary | {filter,flowAccountId?} | `income`/`expense`/`net`, `totalCount`/`incomeCount`/`expenseCount`/`transferCount`, `inflow`/`outflow`, and `annual` |
+| /api/statistics/summary | {filter,flowAccountId?,includeAnnualTrend?} | `income`/`expense`/`net`, `totalCount`/`incomeCount`/`expenseCount`/`transferCount`, `inflow`/`outflow`, and `annual` |
 | /api/statistics/categories | {filter,groupBy:"id" or "name",direction:"income" or "expense"} | Category aggregation array with `id`/`name`/`income`/`expense`/`incomeCount`/`expenseCount`/`latest` |
 | /api/statistics/daily | {filter} | `days`, `startWeekday`, `weekCount`, `total`, and `activeDays` |
 
-Summary amounts exclude transfers. When `flowAccountId` is specified, `inflow`/`outflow` include transfers involving that account. `annual`={amount,spanDays,count}; an annualized amount is returned only when there are at least two expenses and their first-to-last time span rounds to more than 0 days, otherwise `amount=null`.
+Summary amounts exclude transfers. When `flowAccountId` is specified, `inflow`/`outflow` include transfers involving that account. `annual`={amount,spanDays,count,days?} uses only matching expenses dated on or before today in Beijing time. Its range starts on the first matching expense date and ends today, including both dates; `spanDays` counts every calendar day, including days without expenses. `amount` is the matching cumulative expense divided by `spanDays`, multiplied by 365, and rounded to integer cents. One expense is sufficient; no matching expense through today returns `amount=null`, `spanDays=0`, and `count=0`. Future transactions remain in ordinary filtered totals but do not enter annualized spending.
+
+With `includeAnnualTrend=true`, `annual.days` contains one `{date,amount}` point per day in that range, in ascending date order. Each point annualizes only matching expenses up to that date using the number of days since the first expense, including both dates. Days after the filter's end date still appear through today; their numerator stays unchanged. The last point equals `annual.amount`, and the point count equals `annual.spanDays`. The series is omitted by default and when there are no matching expenses through today. It is independent of the daily-statistics interface's 3661-day limit.
 
 For categories, `direction` controls sorting. The response contains every category with income or expenses and amounts in both directions; when the frontend draws a one-direction chart, it omits groups whose amount in that direction is 0. `groupBy=name` merges same-name categories across accounts and returns `id` as `null`. The name for uncategorized transactions is “未分类”.
 

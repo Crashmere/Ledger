@@ -3,9 +3,11 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import type { Summary, DailyResult, CategoryTotal, TransactionFilter } from "../api";
 import { money } from "../services/presentation";
 import ExpenseHeatmap from "./ExpenseHeatmap.vue";
+import AnnualExpenseChart from "./AnnualExpenseChart.vue";
 import InsightTransactions from "./InsightTransactions.vue";
 import type { InsightSelection } from "../services/insightTransactions";
 import { trendSeries } from "../services/insightData";
+import { chartMaximum, chartMoney } from "../services/chart";
 import { useMediaQuery } from "../composables/useMediaQuery";
 const props = defineProps<{
   summary: Summary;
@@ -58,17 +60,9 @@ const trend = computed(() => trendSeries(props.daily.days));
 const unitLabel = computed(
   () => ({ day: "日", month: "月", year: "年" })[trend.value.unit],
 );
-const max = computed(() => {
-  const largest = Math.max(
-    100,
-    ...trend.value.points.flatMap((d) => [d.expense, d.income]),
-  );
-  const magnitude = 10 ** Math.floor(Math.log10(largest / 4));
-  const tick =
-    ([1, 2, 2.5, 5, 10].find((value) => value * magnitude >= largest / 4) ??
-      10) * magnitude;
-  return tick * 4;
-});
+const max = computed(() =>
+  chartMaximum(trend.value.points.flatMap((d) => [d.expense, d.income])),
+);
 const active = ref<number | null>(null);
 const current = computed(() =>
   active.value === null ? null : trend.value.points[active.value],
@@ -112,10 +106,7 @@ const axisPoints = computed(() => {
     .filter((point) => point.index % stride === 0);
 });
 function axisMoney(cents: number) {
-  return max.value >= 1000000 && cents > 0
-    ? (cents / 1000000).toLocaleString("zh-CN", { maximumFractionDigits: 1 }) +
-        "万"
-    : money(Math.round(cents)).replace(".00", "");
+  return chartMoney(cents, max.value);
 }
 const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
 </script>
@@ -215,6 +206,7 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
         小额收支保留最低可见高度，具体金额以提示为准
       </p>
     </section>
+    <AnnualExpenseChart :annual="summary.annual" />
     <div class="insight-bottom">
       <section class="distribution">
         <div class="insight-heading">
@@ -293,7 +285,7 @@ const tone = (i: number) => "var(--chart-" + ((i % 7) + 1) + ")";
           }}</strong
           ><small>{{
             summary.annual.amount === null
-              ? "至少需要两笔不同日期的支出"
+              ? "当前筛选暂无已发生支出"
               : "基于 " +
                 summary.annual.count +
                 " 笔支出 · " +

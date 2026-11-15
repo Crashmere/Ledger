@@ -45,7 +45,11 @@ export interface TransactionPage {
 export interface Summary {
   income: Cents; expense: Cents; net: Cents; totalCount: number;
   incomeCount: number; expenseCount: number; transferCount: number;
-  inflow: Cents; outflow: Cents; annual: { amount: Cents | null; spanDays: number; count: number };
+  inflow: Cents; outflow: Cents; annual: Annual;
+}
+export interface AnnualPoint { date: string; amount: Cents }
+export interface Annual {
+  amount: Cents | null; spanDays: number; count: number; days?: AnnualPoint[];
 }
 export interface CategoryTotal {
   id: Id | null; name: string; income: Cents; expense: Cents;

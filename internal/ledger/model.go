@@ -112,13 +112,19 @@ type TransactionPage struct {
 	DayTotals  map[string]DayTotal `json:"dayTotals,omitempty"`
 }
 type SummaryQuery struct {
-	Filter        TransactionFilter `json:"filter"`
-	FlowAccountID string            `json:"flowAccountId,omitempty"`
+	Filter             TransactionFilter `json:"filter"`
+	FlowAccountID      string            `json:"flowAccountId,omitempty"`
+	IncludeAnnualTrend bool              `json:"includeAnnualTrend,omitempty"`
+}
+type AnnualPoint struct {
+	Date   string `json:"date"`
+	Amount int64  `json:"amount"`
 }
 type Annual struct {
-	Amount   *int64 `json:"amount"`
-	SpanDays int64  `json:"spanDays"`
-	Count    int64  `json:"count"`
+	Amount   *int64        `json:"amount"`
+	SpanDays int64         `json:"spanDays"`
+	Count    int64         `json:"count"`
+	Days     []AnnualPoint `json:"days,omitempty"`
 }
 type Summary struct {
 	Income        int64  `json:"income"`

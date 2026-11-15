@@ -312,7 +312,7 @@ async function load(stats = true, background = false) {
         sortDir: sort.value.endsWith("asc") ? "asc" : "desc",
       }),
       stats
-        ? statsService.summary(f, scopeAccount.value?.id)
+        ? statsService.summary(f, scopeAccount.value?.id, view.value === "insights")
         : Promise.resolve(summary.value),
       stats
         ? statsService.categories(f, "name", direction.value)
@@ -962,7 +962,7 @@ onUnmounted(() => {
                 </dd>
                 <small>{{
                   summary.annual.amount === null
-                    ? "支出样本不足以折算"
+                    ? "当前筛选暂无已发生支出"
                     : "基于 " + summary.annual.spanDays + " 天的支出"
                 }}</small>
               </div>
