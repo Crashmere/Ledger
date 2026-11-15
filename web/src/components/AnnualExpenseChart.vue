@@ -56,7 +56,6 @@ function inspect(event: MouseEvent) {
       <div class="annual-readout" aria-live="polite">
         <span>{{ current.date }}</span>
         <strong class="num neg">折合全年 {{ money(current.amount) }}</strong>
-        <span class="annual-help">悬停或点击查看每日折算值</span>
       </div>
       <svg
         class="annual-chart"
@@ -113,7 +112,7 @@ function inspect(event: MouseEvent) {
   color: var(--fg-2);
 }
 .annual-readout strong { font-weight: 500; }
-.annual-help, .annual-formula { color: var(--fg-3); }
+.annual-formula { color: var(--fg-3); }
 .annual-chart {
   width: 100%;
   height: 230px;
