@@ -10,10 +10,36 @@ export function chartMaximum(amounts: number[]) {
   return tick * 4;
 }
 
-export function chartMoney(cents: number, maximum: number) {
+export function chartMoney(cents: number, maximum: number, fractionDigits = 1) {
   return maximum >= 1000000 && cents > 0
-    ? (cents / 1000000).toLocaleString("zh-CN", { maximumFractionDigits: 1 }) + "万"
+    ? (cents / 1000000).toLocaleString("zh-CN", { maximumFractionDigits: fractionDigits }) + "万"
     : money(Math.round(cents)).replace(".00", "");
+}
+
+export function annualChartScale(amounts: number[]) {
+  let minimum = amounts[0] ?? 0;
+  let maximum = minimum;
+  for (const amount of amounts) {
+    minimum = Math.min(minimum, amount);
+    maximum = Math.max(maximum, amount);
+  }
+  // A one-cent offset keeps rounded zero amounts on the same continuous scale.
+  const low = Math.log1p(minimum);
+  const high = Math.log1p(maximum);
+  const padding = high > low ? (high - low) * 0.08 : Math.log(1.1);
+  const start = Math.max(0, low - padding);
+  const end = maximum === 0 ? Math.log(2) : high + padding;
+  const position = (amount: number) => (Math.log1p(amount) - start) / (end - start);
+  const ticks = [...new Set(Array.from({ length: 5 }, (_, i) =>
+    Math.round(Math.expm1(start + (end - start) * i / 4)),
+  ))];
+  const smallestGap = Math.min(...ticks.slice(1).map((tick, i) => tick - ticks[i]));
+  const fractionDigits = Math.min(6, Math.max(1, Math.ceil(Math.log10(1000000 / smallestGap))));
+  return {
+    position,
+    ticks,
+    label: (amount: number) => chartMoney(amount, maximum, fractionDigits),
+  };
 }
 
 export function smoothLine(points: { x: number; y: number }[]) {

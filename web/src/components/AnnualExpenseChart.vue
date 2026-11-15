@@ -2,16 +2,16 @@
 import { computed, ref, watch } from "vue";
 import type { Annual } from "../api";
 import { money } from "../services/presentation";
-import { chartMaximum, chartMoney, smoothLine } from "../services/chart";
+import { annualChartScale, smoothLine } from "../services/chart";
 
 const props = defineProps<{ annual: Annual }>();
 const days = computed(() => props.annual.days ?? []);
-const maximum = computed(() => chartMaximum(days.value.map((day) => day.amount)));
+const scale = computed(() => annualChartScale(days.value.map((day) => day.amount)));
 const active = ref<number | null>(null);
 watch(days, () => { active.value = null; });
 const current = computed(() => days.value[active.value ?? days.value.length - 1]);
 const x = (index: number) => days.value.length === 1 ? 325 : 45 + index * 560 / (days.value.length - 1);
-const y = (amount: number) => 169 - amount / maximum.value * 144;
+const y = (amount: number) => 169 - scale.value.position(amount) * 144;
 const line = computed(() => smoothLine(days.value.map((day, i) => ({ x: x(i), y: y(day.amount) }))));
 const area = computed(() => days.value.length > 1
   ? `${line.value}L605 169H45Z` : "");
@@ -49,7 +49,7 @@ function inspect(event: MouseEvent) {
       <h2>折合全年支出走势</h2>
       <p v-if="days.length">
         {{ days[0].date }} 至 {{ days[days.length - 1].date }} ·
-        {{ annual.spanDays }} 天 · 每天一个点
+        {{ annual.spanDays }} 天 · 每天一个点 · 对数纵轴
       </p>
     </div>
     <template v-if="current">
@@ -61,15 +61,16 @@ function inspect(event: MouseEvent) {
         class="annual-chart"
         viewBox="0 0 620 215"
         role="img"
-        aria-label="每日累计支出折合全年金额的平滑曲线图"
+        aria-label="每日累计支出折合全年金额的平滑曲线图，对数纵轴"
         :data-point-count="days.length"
+        data-scale="log"
         @pointermove="inspect"
         @click="inspect"
         @pointerleave="active = null"
       >
-        <g v-for="level in [0, 1, 2, 3, 4]" :key="level">
-          <path :d="'M45 ' + (25 + level * 36) + 'H605'" stroke="var(--border)" stroke-dasharray="3 4" />
-          <text x="0" :y="29 + level * 36">{{ chartMoney(maximum * (4 - level) / 4, maximum) }}</text>
+        <g v-for="amount in scale.ticks" :key="amount" class="annual-y-tick" :data-amount="amount">
+          <path :d="'M45 ' + y(amount) + 'H605'" stroke="var(--border)" stroke-dasharray="3 4" />
+          <text x="0" :y="y(amount) + 4">{{ scale.label(amount) }}</text>
         </g>
         <path :d="area" fill="var(--expense)" opacity="0.07" />
         <path :d="line" fill="none" stroke="var(--expense)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
